@@ -57,6 +57,70 @@ pub struct Server {
     new_output: wl_listener
 }
 
+impl Server {
+    fn new() -> Server {
+        unsafe {
+            let display = wl_display_create();
+            let backend = wlr_backend_autocreate(display, None);
+            let renderer = wlr_backend_get_renderer(backend);
+
+            let views = Vec::new();
+            let xdg_shell = wlr_xdg_shell_create(display);
+            let new_xdg_surface = mem::zeroed();
+
+            let cursor = wlr_cursor_create();
+            let cursor_axis = mem::zeroed();
+            let cursor_button = mem::zeroed();
+            let cursor_frame = mem::zeroed();
+            let cursor_motion = mem::zeroed();
+            let cursor_motion_absolute = mem::zeroed();
+            let cursor_mgr = wlr_xcursor_manager_create(ptr::null(), 24);
+
+            let seat = ptr::null_mut();
+            let request_cursor = mem::zeroed();
+            let new_input = mem::zeroed();
+
+            let output_layout = wlr_output_layout_create();
+            let new_output = mem::zeroed();
+
+            Server {
+                display,
+                backend,
+                renderer,
+
+                views,
+                views_idx: 0,
+                xdg_shell,
+                new_xdg_surface,
+
+                cursor,
+                cursor_axis,
+                cursor_button,
+                cursor_frame,
+                cursor_motion,
+                cursor_motion_absolute,
+                cursor_mgr,
+
+                seat,
+                keyboards: Vec::new(),
+                new_input,
+                request_cursor,
+                cursor_mode: CursorMode::Passthrough,
+                grab_x: 0.0,
+                grab_y: 0.0,
+                grab_width: 0,
+                grab_height: 0,
+                resize_edges: 0,
+                grabbed_view: ptr::null_mut(),
+
+                output_layout,
+                outputs: Vec::new(),
+                new_output
+            }
+        }
+    }
+}
+
 #[repr(C)]
 pub struct Keyboard {
 
@@ -98,63 +162,8 @@ fn main() {
         wlr_log_init(wlr_log_importance_WLR_DEBUG, None);
 
         // Initialize Server, nove to impl Server::new
-        let display = wl_display_create();
-        let backend = wlr_backend_autocreate(display, None);
-        let renderer = wlr_backend_get_renderer(backend);
+        let mut server = Server::new();
 
-        let views = Vec::new();
-        let xdg_shell = wlr_xdg_shell_create(display);
-        let new_xdg_surface = mem::zeroed();
-
-        let cursor = wlr_cursor_create();
-        let cursor_axis = mem::zeroed();
-        let cursor_button = mem::zeroed();
-        let cursor_frame = mem::zeroed();
-        let cursor_motion = mem::zeroed();
-        let cursor_motion_absolute = mem::zeroed();
-        let cursor_mgr = wlr_xcursor_manager_create(ptr::null(), 24);
-
-        let seat = ptr::null_mut();
-        let request_cursor = mem::zeroed();
-        let new_input = mem::zeroed();
-
-        let output_layout = wlr_output_layout_create();
-        let new_output = mem::zeroed();
-
-        let mut server = Server {
-            display,
-            backend,
-            renderer,
-
-            views,
-            views_idx: 0,
-            xdg_shell,
-            new_xdg_surface,
-
-            cursor,
-            cursor_axis,
-            cursor_button,
-            cursor_frame,
-            cursor_motion,
-            cursor_motion_absolute,
-            cursor_mgr,
-
-            seat,
-            keyboards: Vec::new(),
-            new_input,
-            request_cursor,
-            cursor_mode: CursorMode::Passthrough,
-            grab_x: 0.0,
-            grab_y: 0.0,
-            grab_width: 0,
-            grab_height: 0,
-            resize_edges: 0,
-            grabbed_view: ptr::null_mut(),
-
-            output_layout,
-            outputs: Vec::new(),
-            new_output
-        };
 
         // FIXME
 
