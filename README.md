@@ -20,6 +20,6 @@ We make use of wlroots to do the heavy lifting, however it is written in C. Ther
 
 ## Resources
 
-https://wayland-book.com/
-https://github.com/swaywm/wlroots/blob/master/tinywl/tinywl.c
-https://hg.sr.ht/~icefox/swot
+- https://wayland-book.com/
+- https://github.com/swaywm/wlroots/blob/master/tinywl/tinywl.c
+- https://hg.sr.ht/~icefox/swot
