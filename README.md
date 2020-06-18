@@ -12,6 +12,12 @@ We make use of wlroots to do the heavy lifting, however it is written in C. Ther
 
 - Make wayland-protocol generation via wayland-scanner dynamic and add more protocols
 
+
+## Notes
+
+- VS Code rust plugin with ?rls/rust-analyzer? backend has problems with code completion when using generated bindings.
+
+
 ## Resources
 
 https://wayland-book.com/
