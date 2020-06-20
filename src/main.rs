@@ -123,21 +123,40 @@ impl Server {
 
 #[repr(C)]
 pub struct Keyboard {
-
+    server: *mut Server,
+    device: *mut wlr_input_device,
+    modifiers: wl_listener,
+    key: wl_listener
 }
 
 #[repr(C)]
 pub struct Output {
-
+    link: wl_list,
+    server: *mut Server,
+    wlr_output: *mut wlr_output,
+    frame: wl_listener
 }
 
 #[repr(C)]
 pub struct View {
-
+    link: wl_list,
+    server: *mut Server,
+    xdg_surface: *mut wlr_xdg_surface,
+    map: wl_listener,
+    unmap: wl_listener,
+    destroy: wl_listener,
+    request_move: wl_listener,
+    request_resize: wl_listener,
+    mapped: bool,
+    x: i32,
+    y: i32
 }
 
 struct RenderData {
-
+    output: *mut wlr_output,
+    renderer: *mut wlr_renderer,
+    view: *mut View,
+    when: Duration
 }
 
 macro_rules! offset_of {
@@ -152,6 +171,77 @@ macro_rules! wl_container_of {
     }
 }
 
+unsafe fn wl_signal_add(signal: *mut wl_signal, listener: *mut wl_listener) {
+    wl_list_insert((*signal).listener_list.prev, &mut (*listener).link);
+}
+
+unsafe extern "C" fn server_new_output(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    let server = &mut *(wl_container_of!(listener, Server, new_output));
+    let wlr_output = &mut *(data as *mut wlr_output);
+
+    if !(wl_list_empty(&wlr_output.modes) != 0) {
+        let mode = wlr_output_preferred_mode(wlr_output);
+        wlr_output_set_mode(wlr_output, mode);
+        wlr_output_enable(wlr_output, true);
+
+        if !wlr_output_commit(wlr_output) {
+            return;
+        }
+    }
+
+    // FIXME impl Output new()
+    let mut output: Pin<Box<Output>> = Box::pin(mem::zeroed());
+    output.wlr_output = wlr_output;
+    output.server = server;
+    output.frame.notify = Some(output_frame);
+
+    wl_signal_add(&mut wlr_output.events.frame, &mut output.frame);
+    server.outputs.push(output);
+
+    wlr_output_layout_add_auto(server.output_layout, wlr_output);
+}
+
+unsafe extern "C" fn output_frame(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    let output = &mut *(wl_container_of!(listener, Output, frame));
+    let renderer = (*output.server).renderer;
+
+    if !wlr_output_attach_render(output.wlr_output, ptr::null_mut()) {
+        return;
+    }
+
+    let width = &mut 0;
+    let height = &mut 0;
+    wlr_output_effective_resolution(output.wlr_output, width, height);
+
+    wlr_renderer_begin(renderer, *width, *height);
+    let color = [0.1, 0.2, 0.3, 1.0];
+    wlr_renderer_clear(renderer, color.as_ptr());
+
+    // render back to front
+    for view in (*output.server).views.iter_mut().rev() {
+        if !view.mapped {
+            continue;
+        }
+
+        let mut rdata = RenderData {
+            output: output.wlr_output,
+            view: &mut **view,
+            renderer: renderer,
+            when: START_TIME.elapsed()
+        };
+
+        wlr_xdg_surface_for_each_surface((*view).xdg_surface, Some(render_surface), (&mut rdata) as *mut _ as *mut ffi::c_void);
+    }
+
+    wlr_output_render_software_cursors(output.wlr_output, ptr::null_mut());
+    wlr_renderer_end(renderer);
+    wlr_output_commit(output.wlr_output);
+}
+
+unsafe extern "C" fn render_surface (surface: *mut wlr_surface, sx: i32, sy: i32, data: *mut ffi::c_void) {
+
+}
+
 
 fn main() {
     println!("Hello, waybox!");
@@ -161,8 +251,15 @@ fn main() {
     unsafe {
         wlr_log_init(wlr_log_importance_WLR_DEBUG, None);
 
-        // Initialize Server, nove to impl Server::new
+        // Initialize Server
         let mut server = Server::new();
+
+        wlr_renderer_init_wl_display(server.renderer, server.display);
+        wlr_compositor_create(server.display, server.renderer);
+        wlr_data_device_manager_create(server.display);
+
+        server.new_output.notify = Some(server_new_output);
+        wl_signal_add(&mut (*server.backend).events.new_output, &mut server.new_output);
 
 
         // FIXME

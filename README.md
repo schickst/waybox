@@ -16,6 +16,7 @@ We make use of wlroots to do the heavy lifting, however it is written in C. Ther
 ## Notes
 
 - VS Code rust plugin with ?rls/rust-analyzer? backend has problems with code completion when using generated bindings.
+- rls and rust-analyzer use way too much memory and cpu usage goes through the roof when parsing macros.
 
 
 ## Resources
