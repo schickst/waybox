@@ -239,7 +239,38 @@ unsafe extern "C" fn output_frame(listener: *mut wl_listener, data: *mut ffi::c_
 }
 
 unsafe extern "C" fn render_surface (surface: *mut wlr_surface, sx: i32, sy: i32, data: *mut ffi::c_void) {
+    let rdata = &mut *(data as *mut RenderData);
+    let view = rdata.view;
+    let output = rdata.output;
 
+    let texture = wlr_surface_get_texture(surface);
+    if texture.is_null() {
+        return;
+    }
+
+    let ox = &mut 0.0;
+    let oy = &mut 0.0;
+    wlr_output_layout_output_coords((*(*view).server).output_layout, output, ox, oy);
+    *ox += ((*view).x + sx) as f64;
+    *oy += ((*view).y + sy) as f64;
+
+    let bx = wlr_box {
+        x: (*ox * (*output).scale as f64) as i32,
+        y: (*oy * (*output).scale as f64) as i32,
+        width: ((*surface).current.width as f32 * (*output).scale) as i32,
+        height: ((*surface).current.height as f32 * (*output).scale) as i32,
+    };
+
+    let matrix = [0.0; 9].as_mut_ptr();
+    let transform = wlr_output_transform_invert((*surface).current.transform);
+
+    wlr_matrix_project_box(matrix, &bx, transform, 0.0, (*output).transform_matrix.as_mut_ptr());
+    wlr_render_texture_with_matrix(rdata.renderer, texture, matrix, 1.0);
+    let ts = &mut timespec {
+        tv_sec: rdata.when.as_secs() as i64,
+        tv_nsec: rdata.when.subsec_nanos() as i64
+    };
+    wlr_surface_send_frame_done(surface, ts);
 }
 
 
