@@ -178,8 +178,140 @@ unsafe fn wl_signal_add(signal: *mut wl_signal, listener: *mut wl_listener) {
 
 // ----------------
 
+unsafe fn view_at(view: &mut View, lx: f64, ly: f64) -> Option<(*mut wlr_surface, f64, f64)> {
+    let view_sx = lx - (view.x as f64);
+    let view_sy = ly - (view.y as f64);
+
+    let sx = &mut 0.0;
+    let sy = &mut 0.0;
+
+    let surface = wlr_xdg_surface_surface_at(view.xdg_surface, view_sx, view_sy, sx, sy);
+
+    if surface != ptr::null_mut() {
+        return Some((surface, *sx, *sy));
+    }
+    None
+}
+
+unsafe fn desktop_view_at(server: &mut Server, lx: f64, ly: f64) -> Option<(*mut View, *mut wlr_surface, f64, f64)> {
+    for view in server.views.iter_mut() {
+        match view_at(&mut *view, lx, ly) {
+            None => (),
+            Some((s, sx, sy)) => {
+                return Some(((&mut **view) as *mut View, s, sx,sy));
+            }
+        }
+    }
+    None
+}
+
+unsafe fn process_cursor_move(server: &mut Server, _time: u32) {
+    (*server.grabbed_view).x  = ((*server.cursor).x - server.grab_x) as i32;
+    (*server.grabbed_view).y  = ((*server.cursor).y - server.grab_y) as i32;
+}
+
+unsafe fn process_cursor_resize(server: &mut Server, _time: u32) {
+    let view = server.grabbed_view;
+    let dx = (*server.cursor).x - server.grab_x;
+    let dy = (*server.cursor).y - server.grab_y;
+    let mut x: f64 = (*view).x as _;
+    let mut y: f64 = (*view).y as _;
+    let mut width: f64 = server.grab_width as _;
+    let mut height: f64 = server.grab_height as _;
+
+    if server.resize_edges & wlr_edges_WLR_EDGE_TOP != 0 {
+        y = server.grab_y + dy;
+        height -= dy;
+        if height < 1.0 {
+            y += height
+        }
+    } else if server.resize_edges & wlr_edges_WLR_EDGE_BOTTOM != 0 {
+        height += dy;
+    }
+
+    if server.resize_edges & wlr_edges_WLR_EDGE_LEFT != 0 {
+        x = server.grab_x + dx;
+        width -= dx;
+        if width < 1.0 {
+            x += width;
+        } else if server.resize_edges & wlr_edges_WLR_EDGE_RIGHT != 0 {
+            width += dx
+        }
+    }
+    (*view).x = x as i32;
+    (*view).y = y as i32;
+    wlr_xdg_toplevel_set_size((*view).xdg_surface, width as u32, height as u32);
+}
+
+unsafe fn process_cursor_passthrough(server: &mut Server, time: u32) {
+    let seat = server.seat;
+
+    if let Some((_view, surface, sx, sy)) = desktop_view_at(server, (*server.cursor).x, (*server.cursor).y) {
+        if surface != ptr::null_mut() {
+            let focus_changed = (*seat).pointer_state.focused_surface != surface;
+            wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
+
+            if !focus_changed {
+                wlr_seat_pointer_notify_motion(seat, time, sx, sy);
+            }
+        } else {
+            wlr_seat_pointer_clear_focus(seat);
+        }
+    } else {
+        let cursor_name = &ffi::CStr::from_bytes_with_nul_unchecked(b"left_ptr\0");
+        wlr_xcursor_manager_set_cursor_image(server.cursor_mgr, cursor_name.as_ptr(), server.cursor);
+    }
+}
+
+unsafe fn process_cursor_motion(server: &mut Server, time: u32) {
+    if server.cursor_mode == CursorMode::Move {
+        process_cursor_move(server, time);
+        return;
+    }
+    if server.cursor_mode == CursorMode::Resize {
+        process_cursor_resize(server, time);
+        return;
+    }
+    process_cursor_passthrough(server, time);
+}
+
+unsafe extern "C" fn server_cursor_motion(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    let server = &mut *wl_container_of!(listener, Server, cursor_motion);
+    let event = &mut *(data as *mut wlr_event_pointer_motion);
+
+    wlr_cursor_move(server.cursor, event.device, event.delta_x, event.delta_y);
+    process_cursor_motion(server, event.time_msec);
+}
+
+
+
 unsafe fn focus_view(view: &mut View, surface: &mut wlr_surface) {
-    // FIXME
+    let server = view.server;
+    let seat = (*server).seat;
+    let prev_surface = (*seat).keyboard_state.focused_surface;
+
+    if prev_surface == surface {
+        return;
+    }
+
+    if prev_surface != ptr::null_mut() {
+        let previous = wlr_xdg_surface_from_wlr_surface((*seat).keyboard_state.focused_surface);
+        wlr_xdg_toplevel_set_activated(previous, false);
+    }
+
+    let keyboard = wlr_seat_get_keyboard(seat);
+
+    if let Some((idx, _)) = (*view.server).views
+                                                 .iter()
+                                                 .enumerate()
+                                                 .find(|(_idx, v)| &*(v.as_ref()) as *const View == view)
+    {
+        let v = (*server).views.remove(idx);
+        (*server).views.insert(0, v);
+    }
+
+    wlr_xdg_toplevel_set_activated((*view).xdg_surface, true);
+    wlr_seat_keyboard_notify_enter(seat, (*(*view).xdg_surface).surface, (*keyboard).keycodes.as_mut_ptr(), (*keyboard).num_keycodes, &mut (*keyboard).modifiers);
 }
 
 unsafe fn begin_interactive(view: &mut View, mode: CursorMode, edges: u32) {
@@ -327,7 +459,7 @@ unsafe extern "C" fn server_new_output(listener: *mut wl_listener, data: *mut ff
     wlr_output_layout_add_auto(server.output_layout, wlr_output);
 }
 
-unsafe extern "C" fn output_frame(listener: *mut wl_listener, data: *mut ffi::c_void) {
+unsafe extern "C" fn output_frame(listener: *mut wl_listener, _data: *mut ffi::c_void) {
     let output = &mut *(wl_container_of!(listener, Output, frame));
     let renderer = (*output.server).renderer;
 
@@ -420,6 +552,13 @@ fn main() {
 
         server.new_xdg_surface.notify = Some(server_new_xdg_surface);
         wl_signal_add(&mut (*server.xdg_shell).events.new_surface, &mut server.new_xdg_surface);
+
+        wlr_cursor_attach_output_layout(server.cursor, server.output_layout);
+        wlr_xcursor_manager_load(server.cursor_mgr, 1.0);
+
+        server.cursor_motion.notify = Some(server_cursor_motion);
+        wl_signal_add(&mut (*server.cursor).events.motion, &mut server.cursor_motion);
+
 
 
         // FIXME
