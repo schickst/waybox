@@ -1,6 +1,7 @@
 use std::ffi;
 use std::mem;
 use std::pin::Pin;
+use std::process::Command;
 use std::ptr;
 use std::time::{Duration, Instant};
 
@@ -177,20 +178,61 @@ unsafe fn wl_signal_add(signal: *mut wl_signal, listener: *mut wl_listener) {
 
 // ----------------
 
-unsafe fn begin_interactive(view: &mut View, mode: CursorMode, edges: u32) {
+unsafe fn focus_view(view: &mut View, surface: &mut wlr_surface) {
     // FIXME
+}
+
+unsafe fn begin_interactive(view: &mut View, mode: CursorMode, edges: u32) {
+    let server = &mut *view.server;
+    let focused_surface = (*server.seat).pointer_state.focused_surface;
+
+    if (*view.xdg_surface).surface != focused_surface {
+        return;
+    }
+
+    server.grabbed_view = view;
+    server.cursor_mode = mode;
+
+    let mut geo_box = mem::zeroed();
+    wlr_xdg_surface_get_geometry(view.xdg_surface, &mut geo_box);
+
+    if mode == CursorMode::Move {
+        server.grab_x = (*server.cursor).x - (view.x as f64);
+        server.grab_x = (*server.cursor).y - (view.y as f64);
+    } else {
+        server.grab_x = (*server.cursor).x - (geo_box.x as f64);
+        server.grab_x = (*server.cursor).y - (geo_box.y as f64);
+    }
+
+    server.grab_width = geo_box.width;
+    server.grab_height = geo_box.height;
+    server.resize_edges = edges;
 }
 
 unsafe extern "C" fn xdg_surface_map(listener: *mut wl_listener, _data: *mut ffi::c_void) {
-    // FIXME
+    let view = wl_container_of!(listener, View, unmap);
+    (*view).mapped = true;
+    focus_view(&mut *view, &mut *(*(*view).xdg_surface).surface);
 }
 
 unsafe extern "C" fn xdg_surface_unmap(listener: *mut wl_listener, _data: *mut ffi::c_void) {
-    // FIXME
+    let view = &mut *wl_container_of!(listener, View, unmap);
+    view.mapped = false;
 }
 
 unsafe extern "C" fn xdg_surface_destroy(listener: *mut wl_listener, _data: *mut ffi::c_void) {
-    // FIXME
+    let view = &mut *wl_container_of!(listener, View, destroy);
+
+    // Ugh, I do not fully understand the type inference
+    if let Some((idx, _)) = (*view.server).views
+                                                 .iter()
+                                                 .enumerate()
+                                                 .find(|(_idx, v)| &*(v.as_ref()) as *const View == view)
+    {
+        (*view.server).views.remove(idx);
+    } else {
+        panic!("xdg_surface_destroy: Surface index not found");
+    }
 }
 
 
@@ -402,6 +444,9 @@ fn main() {
 
         let log_str = ffi::CString::new("Running Waybar Wayland Compositor on display %s").unwrap();
         _wlr_log(wlr_log_importance_WLR_INFO, log_str.as_ptr(), socket);
+
+        // missing something?
+        //Command::new("/bin/sh").arg("-c").arg("termite").spawn().expect("termite failed to launch");
 
         wl_display_run(server.display);
 
