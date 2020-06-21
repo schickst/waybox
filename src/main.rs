@@ -178,12 +178,151 @@ unsafe fn wl_signal_add(signal: *mut wl_signal, listener: *mut wl_listener) {
 
 // ----------------
 
+unsafe extern "C" fn keyboard_handle_modifiers(
+    listener: *mut wl_listener,
+    _data: *mut ffi::c_void,
+) {
+    let keyboard = &mut *wl_container_of!(listener, Keyboard, modifiers);
+    wlr_seat_set_keyboard((*keyboard.server).seat, (*keyboard).device);
+    wlr_seat_keyboard_notify_modifiers(
+        (*keyboard.server).seat,
+        &mut (*(*keyboard.device).__bindgen_anon_1.keyboard).modifiers,
+    );
+}
+
+unsafe fn handle_keybinding(server: &mut Server, sym: xkb_keysym_t) -> bool {
+    #[allow(non_upper_case_globals)]
+    match sym {
+        XKB_KEY_Escape => {
+            wl_display_terminate(server.display);
+        }
+        XKB_KEY_F1 => {
+            // Cycle to next view.
+            if server.views.len() > 2 {
+                server.views_idx = (server.views_idx + 1) % server.views.len();
+                let current_view = &mut server.views[server.views_idx];
+                // TODO: This lifetime-break-with-pointer
+                // is TOTALLY FINE.  Nothing to see here, move along.
+                let current_surface = (*current_view.xdg_surface).surface;
+                focus_view(current_view, &mut *current_surface);
+            }
+        }
+        _ => {
+            return false;
+        }
+    }
+    true
+}
+
+unsafe extern "C" fn keyboard_handle_key(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    let keyboard = &mut *(wl_container_of!(listener, Keyboard, key));
+    let server = keyboard.server;
+    let event = &*(data as *const wlr_event_keyboard_key);
+    let seat = (*server).seat;
+    let kb = (*keyboard.device).__bindgen_anon_1.keyboard;
+
+    // Translate libinput keycode -> xkbcommon
+    let keycode: u32 = event.keycode + 8;
+    // This needs a pointer-to-pointer, yay
+    let syms: *mut *const xkb_keysym_t = &mut ptr::null();
+    let nsyms = xkb_state_key_get_syms((*kb).xkb_state, keycode, syms);
+    let mut handled = false;
+    let modifiers = wlr_keyboard_get_modifiers(kb);
+    if modifiers & (wlr_keyboard_modifier_WLR_MODIFIER_ALT) != 0
+        && event.state == wlr_key_state_WLR_KEY_PRESSED
+    {
+        for i in 0..nsyms {
+            // TODO: Figure out what the heck is up with syms, actually
+            handled = handle_keybinding(&mut *server, **syms.offset(i as isize));
+        }
+    }
+
+    if !handled {
+        // Pass it along to the client
+        wlr_seat_set_keyboard(seat, keyboard.device);
+        wlr_seat_keyboard_notify_key(seat, event.time_msec, event.keycode, event.state);
+    }
+}
+
+
+unsafe fn server_new_keyboard(server: *mut Server, device: *mut wlr_input_device) {
+    let mut modifiers: wl_listener = mem::zeroed();
+    modifiers.notify = Some(keyboard_handle_modifiers);
+
+    let mut key: wl_listener = mem::zeroed();
+    key.notify = Some(keyboard_handle_key);
+
+    let mut keyboard = Box::pin(Keyboard {
+        server,
+        device,
+        modifiers,
+        key,
+    });
+
+    // Prepare a default keymap and assign it to the keyboard
+    let mut rules: xkb_rule_names = mem::zeroed();
+    let context = xkb_context_new(xkb_context_flags_XKB_CONTEXT_NO_FLAGS);
+    // Apparently xkb_map_new_from_names got renamed at some point?
+    let keymap = xkb_keymap_new_from_names(
+        context,
+        &mut rules,
+        xkb_keymap_compile_flags_XKB_KEYMAP_COMPILE_NO_FLAGS,
+    );
+
+    wlr_keyboard_set_keymap((*device).__bindgen_anon_1.keyboard, keymap);
+    xkb_keymap_unref(keymap);
+    xkb_context_unref(context);
+    wlr_keyboard_set_repeat_info((*device).__bindgen_anon_1.keyboard, 25, 600);
+
+    wl_signal_add(
+        &mut (*(*device).__bindgen_anon_1.keyboard).events.modifiers,
+        &mut (*keyboard).modifiers,
+    );
+    wl_signal_add(
+        &mut (*(*device).__bindgen_anon_1.keyboard).events.key,
+        &mut (*keyboard).key,
+    );
+    wlr_seat_set_keyboard((*server).seat, device);
+    (*server).keyboards.push(keyboard);
+}
+
+unsafe fn server_new_pointer(server: *mut Server, device: *mut wlr_input_device) {
+    wlr_cursor_attach_input_device((*server).cursor, device);
+}
+
 unsafe extern "C" fn server_new_input(listener: *mut wl_listener, data: *mut ffi::c_void) {
-    // FIXME
+    let server = &mut *(wl_container_of!(listener, Server, new_input));
+    let device = &mut *(data as *mut wlr_input_device);
+    #[allow(non_upper_case_globals)]
+    match device.type_ {
+        wlr_input_device_type_WLR_INPUT_DEVICE_KEYBOARD => server_new_keyboard(server, device),
+        wlr_input_device_type_WLR_INPUT_DEVICE_POINTER => server_new_pointer(server, device),
+        _ => (),
+    }
+    // Let the wlr_seat know what our capabilities are,
+    // we assume we always have a pointer.
+    let caps: u32 = if server.keyboards.is_empty() {
+        wl_seat_capability_WL_SEAT_CAPABILITY_POINTER
+    } else {
+        wl_seat_capability_WL_SEAT_CAPABILITY_POINTER
+            | wl_seat_capability_WL_SEAT_CAPABILITY_KEYBOARD
+    };
+    wlr_seat_set_capabilities(server.seat, caps);
 }
 
 unsafe extern "C" fn seat_request_cursor(listener: *mut wl_listener, data: *mut ffi::c_void) {
-    // FIXME
+    let server = &mut *(wl_container_of!(listener, Server, request_cursor));
+    let event = &mut *(data as *mut wlr_seat_pointer_request_set_cursor_event);
+    let focused_client = (*server.seat).pointer_state.focused_client;
+    // Check that the client we got it from is the one that actually has focus
+    if focused_client == event.seat_client {
+        wlr_cursor_set_surface(
+            server.cursor,
+            event.surface,
+            event.hotspot_x,
+            event.hotspot_y,
+        );
+    }
 }
 
 
@@ -301,15 +440,36 @@ unsafe extern "C" fn server_cursor_motion_absolute(listener: *mut wl_listener, d
 }
 
 unsafe extern "C" fn server_cursor_button(listener: *mut wl_listener, data: *mut ffi::c_void) {
-    // FIXME
+    let server = &mut *wl_container_of!(listener, Server, cursor_button);
+    let event = &mut *(data as *mut wlr_event_pointer_button);
+    wlr_seat_pointer_notify_button(server.seat, event.time_msec, event.button, event.state);
+    if let Some((view, surface, _sx, _sy)) =
+        desktop_view_at(server, (*server.cursor).x, (*server.cursor).y)
+    {
+        if event.state == wlr_button_state_WLR_BUTTON_RELEASED {
+            server.cursor_mode = CursorMode::Passthrough;
+        } else {
+            focus_view(&mut *view, &mut *surface);
+        }
+    }
 }
 
 unsafe extern "C" fn server_cursor_axis(listener: *mut wl_listener, data: *mut ffi::c_void) {
-    // FIXME
+    let server = &mut *wl_container_of!(listener, Server, cursor_axis);
+    let event = &mut *(data as *mut wlr_event_pointer_axis);
+    wlr_seat_pointer_notify_axis(
+        server.seat,
+        event.time_msec,
+        event.orientation,
+        event.delta,
+        event.delta_discrete,
+        event.source,
+    )
 }
 
 unsafe extern "C" fn server_cursor_frame(listener: *mut wl_listener, data: *mut ffi::c_void) {
-    // FIXME
+    let server = &mut *wl_container_of!(listener, Server, cursor_frame);
+    wlr_seat_pointer_notify_frame(server.seat);
 }
 
 
@@ -370,7 +530,7 @@ unsafe fn begin_interactive(view: &mut View, mode: CursorMode, edges: u32) {
 }
 
 unsafe extern "C" fn xdg_surface_map(listener: *mut wl_listener, _data: *mut ffi::c_void) {
-    let view = wl_container_of!(listener, View, unmap);
+    let view = wl_container_of!(listener, View, map);
     (*view).mapped = true;
     focus_view(&mut *view, &mut *(*(*view).xdg_surface).surface);
 }
@@ -411,6 +571,8 @@ unsafe extern "C" fn server_new_xdg_surface(listener: *mut wl_listener, data: *m
     let server = wl_container_of!(listener, Server, new_xdg_surface);
     let xdg_surface = data as *mut wlr_xdg_surface;
 
+    dbg!(xdg_surface);
+
     if (*xdg_surface).role != wlr_xdg_surface_role_WLR_XDG_SURFACE_ROLE_TOPLEVEL {
         return;
     }
@@ -449,6 +611,7 @@ unsafe extern "C" fn server_new_xdg_surface(listener: *mut wl_listener, data: *m
             y: 0
         }
     );
+    dbg!(view.xdg_surface);
 
     wl_signal_add(&mut (*xdg_surface).events.map, &mut view.map);
     wl_signal_add(&mut (*xdg_surface).events.unmap, &mut view.unmap);
@@ -635,7 +798,7 @@ fn main() {
         _wlr_log(wlr_log_importance_WLR_INFO, log_str.as_ptr(), socket);
 
         // missing something?
-        //Command::new("/bin/sh").arg("-c").arg("termite").spawn().expect("termite failed to launch");
+        Command::new("/bin/sh").arg("-c").arg("termite").spawn().expect("termite failed to launch");
 
         wl_display_run(server.display);
 
