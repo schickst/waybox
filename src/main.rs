@@ -178,6 +178,15 @@ unsafe fn wl_signal_add(signal: *mut wl_signal, listener: *mut wl_listener) {
 
 // ----------------
 
+unsafe extern "C" fn server_new_input(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    // FIXME
+}
+
+unsafe extern "C" fn seat_request_cursor(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    // FIXME
+}
+
+
 unsafe fn view_at(view: &mut View, lx: f64, ly: f64) -> Option<(*mut wlr_surface, f64, f64)> {
     let view_sx = lx - (view.x as f64);
     let view_sy = ly - (view.y as f64);
@@ -283,6 +292,25 @@ unsafe extern "C" fn server_cursor_motion(listener: *mut wl_listener, data: *mut
     process_cursor_motion(server, event.time_msec);
 }
 
+unsafe extern "C" fn server_cursor_motion_absolute(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    let server = &mut *wl_container_of!(listener, Server, cursor_motion_absolute);
+    let event = &mut *(data as *mut wlr_event_pointer_motion_absolute);
+
+    wlr_cursor_warp_absolute(server.cursor, event.device, event.x, event.y);
+    process_cursor_motion(server, event.time_msec);
+}
+
+unsafe extern "C" fn server_cursor_button(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    // FIXME
+}
+
+unsafe extern "C" fn server_cursor_axis(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    // FIXME
+}
+
+unsafe extern "C" fn server_cursor_frame(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    // FIXME
+}
 
 
 unsafe fn focus_view(view: &mut View, surface: &mut wlr_surface) {
@@ -553,15 +581,37 @@ fn main() {
         server.new_xdg_surface.notify = Some(server_new_xdg_surface);
         wl_signal_add(&mut (*server.xdg_shell).events.new_surface, &mut server.new_xdg_surface);
 
+
+        // Cursor
         wlr_cursor_attach_output_layout(server.cursor, server.output_layout);
         wlr_xcursor_manager_load(server.cursor_mgr, 1.0);
 
         server.cursor_motion.notify = Some(server_cursor_motion);
         wl_signal_add(&mut (*server.cursor).events.motion, &mut server.cursor_motion);
 
+        server.cursor_motion_absolute.notify = Some(server_cursor_motion_absolute);
+        wl_signal_add(&mut (*server.cursor).events.motion_absolute, &mut server.cursor_motion_absolute);
+
+        server.cursor_button.notify = Some(server_cursor_button);
+        wl_signal_add(&mut (*server.cursor).events.button, &mut server.cursor_button);
+
+        server.cursor_axis.notify = Some(server_cursor_axis);
+        wl_signal_add(&mut (*server.cursor).events.axis, &mut server.cursor_axis);
+
+        server.cursor_frame.notify = Some(server_cursor_frame);
+        wl_signal_add(&mut (*server.cursor).events.frame, &mut server.cursor_frame);
 
 
-        // FIXME
+        // Seat
+        server.new_input.notify = Some(server_new_input);
+        wl_signal_add(&mut (*server.backend).events.new_input, &mut server.new_input);
+
+        let seat_name = ffi::CString::new("seat0").expect("Seat name error");
+        server.seat = wlr_seat_create(server.display, seat_name.as_ptr());
+
+        server.request_cursor.notify = Some(seat_request_cursor);
+        wl_signal_add(&mut (*server.cursor).events.frame, &mut server.cursor_frame);
+
 
         // Create socket
         let socket = wl_display_add_socket_auto(server.display);
