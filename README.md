@@ -1,3 +1,5 @@
+![Rust](https://github.com/schickst/waybox/workflows/Rust/badge.svg)
+
 # waybox
 
 Waybox is a Wayland Compositor based on [wlroots](https://github.com/swaywm/wlroots) written in Rust. It is similar to fluxbox and Openbox from the X-Window system. It will have floating windows, with some ambitions toward tiling.
