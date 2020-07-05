@@ -11,6 +11,8 @@ We make use of wlroots to do the heavy lifting, however it is written in C. Ther
 ## Todos
 
 - Make wayland-protocol generation via wayland-scanner dynamic and add more protocols
+- Improve keybinding modifier handling
+- Untangle server with the goal to extract it into its own file
 
 
 ## Notes
