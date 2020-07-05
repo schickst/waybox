@@ -6,8 +6,10 @@ use std::ptr;
 use std::time::{Duration, Instant};
 
 mod wlr;
+mod config;
 
 use wlr::*;
+use config::*;
 
 use lazy_static::lazy_static;
 lazy_static! {
@@ -55,7 +57,9 @@ pub struct Server {
 
     output_layout: *mut wlr_output_layout,
     outputs: Vec<Pin<Box<Output>>>,
-    new_output: wl_listener
+    new_output: wl_listener,
+
+    configuration: Configuration
 }
 
 impl Server {
@@ -116,7 +120,9 @@ impl Server {
 
                 output_layout,
                 outputs: Vec::new(),
-                new_output
+                new_output,
+
+                configuration: Configuration::new()
             }
         }
     }
@@ -196,7 +202,7 @@ unsafe fn handle_keybinding(server: &mut Server, sym: xkb_keysym_t) -> bool {
         XKB_KEY_Escape => {
             wl_display_terminate(server.display);
         }
-        XKB_KEY_F1 => {
+        XKB_KEY_F3 => {
             // Cycle to next view.
             if server.views.len() > 2 {
                 server.views_idx = (server.views_idx + 1) % server.views.len();
@@ -208,7 +214,7 @@ unsafe fn handle_keybinding(server: &mut Server, sym: xkb_keysym_t) -> bool {
             }
         }
         _ => {
-            return false;
+            return server.configuration.handle_keybinding(sym);
         }
     }
     true
@@ -228,7 +234,8 @@ unsafe extern "C" fn keyboard_handle_key(listener: *mut wl_listener, data: *mut 
     let nsyms = xkb_state_key_get_syms((*kb).xkb_state, keycode, syms);
     let mut handled = false;
     let modifiers = wlr_keyboard_get_modifiers(kb);
-    if modifiers & (wlr_keyboard_modifier_WLR_MODIFIER_ALT) != 0
+
+    if (*server).configuration.matches_modifiers(modifiers)
         && event.state == wlr_key_state_WLR_KEY_PRESSED
     {
         for i in 0..nsyms {
