@@ -110,4 +110,50 @@ impl Server {
             }
         }
     }
+
+    pub unsafe fn new_pointer(&self, device: *mut wlr_input_device) {
+        wlr_cursor_attach_input_device(self.cursor, device);
+    }
+
+    pub unsafe fn new_keyboard(&mut self, device: *mut wlr_input_device) {
+        let mut modifiers: wl_listener = mem::zeroed();
+        modifiers.notify = Some(keyboard_handle_modifiers);
+
+        let mut key: wl_listener = mem::zeroed();
+        key.notify = Some(keyboard_handle_key);
+
+        let mut keyboard = Box::pin(Keyboard {
+            server: self,
+            device,
+            modifiers,
+            key,
+        });
+
+        // Prepare a default keymap and assign it to the keyboard
+        let mut rules: xkb_rule_names = mem::zeroed();
+        let context = xkb_context_new(xkb_context_flags_XKB_CONTEXT_NO_FLAGS);
+        // Apparently xkb_map_new_from_names got renamed at some point?
+        let keymap = xkb_keymap_new_from_names(
+            context,
+            &mut rules,
+            xkb_keymap_compile_flags_XKB_KEYMAP_COMPILE_NO_FLAGS,
+        );
+
+        wlr_keyboard_set_keymap((*device).__bindgen_anon_1.keyboard, keymap);
+        xkb_keymap_unref(keymap);
+        xkb_context_unref(context);
+        wlr_keyboard_set_repeat_info((*device).__bindgen_anon_1.keyboard, 25, 600);
+
+        wl_signal_add(
+            &mut (*(*device).__bindgen_anon_1.keyboard).events.modifiers,
+            &mut (*keyboard).modifiers,
+        );
+        wl_signal_add(
+            &mut (*(*device).__bindgen_anon_1.keyboard).events.key,
+            &mut (*keyboard).key,
+        );
+        wlr_seat_set_keyboard(self.seat, device);
+        self.keyboards.push(keyboard);
+    }
+
 }

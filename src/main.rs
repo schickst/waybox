@@ -97,58 +97,15 @@ unsafe extern "C" fn keyboard_handle_key(listener: *mut wl_listener, data: *mut 
 }
 
 
-unsafe fn server_new_keyboard(server: *mut Server, device: *mut wlr_input_device) {
-    let mut modifiers: wl_listener = mem::zeroed();
-    modifiers.notify = Some(keyboard_handle_modifiers);
 
-    let mut key: wl_listener = mem::zeroed();
-    key.notify = Some(keyboard_handle_key);
-
-    let mut keyboard = Box::pin(Keyboard {
-        server,
-        device,
-        modifiers,
-        key,
-    });
-
-    // Prepare a default keymap and assign it to the keyboard
-    let mut rules: xkb_rule_names = mem::zeroed();
-    let context = xkb_context_new(xkb_context_flags_XKB_CONTEXT_NO_FLAGS);
-    // Apparently xkb_map_new_from_names got renamed at some point?
-    let keymap = xkb_keymap_new_from_names(
-        context,
-        &mut rules,
-        xkb_keymap_compile_flags_XKB_KEYMAP_COMPILE_NO_FLAGS,
-    );
-
-    wlr_keyboard_set_keymap((*device).__bindgen_anon_1.keyboard, keymap);
-    xkb_keymap_unref(keymap);
-    xkb_context_unref(context);
-    wlr_keyboard_set_repeat_info((*device).__bindgen_anon_1.keyboard, 25, 600);
-
-    wl_signal_add(
-        &mut (*(*device).__bindgen_anon_1.keyboard).events.modifiers,
-        &mut (*keyboard).modifiers,
-    );
-    wl_signal_add(
-        &mut (*(*device).__bindgen_anon_1.keyboard).events.key,
-        &mut (*keyboard).key,
-    );
-    wlr_seat_set_keyboard((*server).seat, device);
-    (*server).keyboards.push(keyboard);
-}
-
-unsafe fn server_new_pointer(server: *mut Server, device: *mut wlr_input_device) {
-    wlr_cursor_attach_input_device((*server).cursor, device);
-}
 
 unsafe extern "C" fn server_new_input(listener: *mut wl_listener, data: *mut ffi::c_void) {
     let server = &mut *(wl_container_of!(listener, Server, new_input));
     let device = &mut *(data as *mut wlr_input_device);
     #[allow(non_upper_case_globals)]
     match device.type_ {
-        wlr_input_device_type_WLR_INPUT_DEVICE_KEYBOARD => server_new_keyboard(server, device),
-        wlr_input_device_type_WLR_INPUT_DEVICE_POINTER => server_new_pointer(server, device),
+        wlr_input_device_type_WLR_INPUT_DEVICE_KEYBOARD => server.new_keyboard(device),
+        wlr_input_device_type_WLR_INPUT_DEVICE_POINTER => server.new_pointer(device),
         _ => (),
     }
     // Let the wlr_seat know what our capabilities are,
