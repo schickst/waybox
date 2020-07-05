@@ -16,7 +16,7 @@ jobs:
 
     steps:
     - name: Install Dependencies
-      run: sudo apt install llvm llvm-dev
+      run: sudo apt install llvm llvm-dev libwayland-dev 
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
