@@ -51,7 +51,6 @@ impl Configuration {
             XKB_KEY_Q => return self.execute_binding("Q"),
             _ => return false
         }
-        true
     }
 
     fn execute_binding(&self, key: &str) -> bool {

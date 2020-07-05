@@ -3,183 +3,28 @@ use std::mem;
 use std::pin::Pin;
 use std::process::Command;
 use std::ptr;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 mod wlr;
 mod config;
+mod keyboard;
+mod output;
+mod server;
+mod utils;
+mod view;
 
 use wlr::*;
 use config::*;
+use keyboard::*;
+use output::*;
+use server::*;
+use utils::*;
+use view::*;
+
 
 use lazy_static::lazy_static;
 lazy_static! {
     static ref START_TIME: Instant = Instant::now();
-}
-
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
-pub enum CursorMode {
-    Passthrough,
-    Move,
-    Resize
-}
-
-#[repr(C)]
-pub struct Server {
-    display: *mut wl_display,
-    backend: *mut wlr_backend,
-    renderer: *mut wlr_renderer,
-
-    xdg_shell: *mut wlr_xdg_shell,
-    new_xdg_surface: wl_listener,
-
-    views: Vec<Pin<Box<View>>>,
-    views_idx: usize,
-
-    cursor: *mut wlr_cursor,
-    cursor_mgr: *mut wlr_xcursor_manager,
-    cursor_motion: wl_listener,
-    cursor_motion_absolute: wl_listener,
-    cursor_button: wl_listener,
-    cursor_axis: wl_listener,
-    cursor_frame: wl_listener,
-
-    seat: *mut wlr_seat,
-    new_input: wl_listener,
-    request_cursor: wl_listener,
-    keyboards: Vec<Pin<Box<Keyboard>>>,
-    cursor_mode: CursorMode,
-    grabbed_view: *mut View,
-    grab_x: f64,
-    grab_y: f64,
-    grab_width: i32,
-    grab_height: i32,
-    resize_edges: u32,
-
-    output_layout: *mut wlr_output_layout,
-    outputs: Vec<Pin<Box<Output>>>,
-    new_output: wl_listener,
-
-    configuration: Configuration
-}
-
-impl Server {
-    fn new() -> Server {
-        unsafe {
-            let display = wl_display_create();
-            let backend = wlr_backend_autocreate(display, None);
-            let renderer = wlr_backend_get_renderer(backend);
-
-            let views = Vec::new();
-            let xdg_shell = wlr_xdg_shell_create(display);
-            let new_xdg_surface = mem::zeroed();
-
-            let cursor = wlr_cursor_create();
-            let cursor_axis = mem::zeroed();
-            let cursor_button = mem::zeroed();
-            let cursor_frame = mem::zeroed();
-            let cursor_motion = mem::zeroed();
-            let cursor_motion_absolute = mem::zeroed();
-            let cursor_mgr = wlr_xcursor_manager_create(ptr::null(), 24);
-
-            let seat = ptr::null_mut();
-            let request_cursor = mem::zeroed();
-            let new_input = mem::zeroed();
-
-            let output_layout = wlr_output_layout_create();
-            let new_output = mem::zeroed();
-
-            Server {
-                display,
-                backend,
-                renderer,
-
-                views,
-                views_idx: 0,
-                xdg_shell,
-                new_xdg_surface,
-
-                cursor,
-                cursor_axis,
-                cursor_button,
-                cursor_frame,
-                cursor_motion,
-                cursor_motion_absolute,
-                cursor_mgr,
-
-                seat,
-                keyboards: Vec::new(),
-                new_input,
-                request_cursor,
-                cursor_mode: CursorMode::Passthrough,
-                grab_x: 0.0,
-                grab_y: 0.0,
-                grab_width: 0,
-                grab_height: 0,
-                resize_edges: 0,
-                grabbed_view: ptr::null_mut(),
-
-                output_layout,
-                outputs: Vec::new(),
-                new_output,
-
-                configuration: Configuration::new()
-            }
-        }
-    }
-}
-
-#[repr(C)]
-pub struct Keyboard {
-    server: *mut Server,
-    device: *mut wlr_input_device,
-    modifiers: wl_listener,
-    key: wl_listener
-}
-
-#[repr(C)]
-pub struct Output {
-    link: wl_list,
-    server: *mut Server,
-    wlr_output: *mut wlr_output,
-    frame: wl_listener
-}
-
-#[repr(C)]
-pub struct View {
-    link: wl_list,
-    server: *mut Server,
-    xdg_surface: *mut wlr_xdg_surface,
-    map: wl_listener,
-    unmap: wl_listener,
-    destroy: wl_listener,
-    request_move: wl_listener,
-    request_resize: wl_listener,
-    mapped: bool,
-    x: i32,
-    y: i32
-}
-
-struct RenderData {
-    output: *mut wlr_output,
-    renderer: *mut wlr_renderer,
-    view: *mut View,
-    when: Duration
-}
-
-macro_rules! offset_of {
-    ($ty:ty, $field:ident) => {
-        &(*(0 as *const $ty)).$field as *const _ as usize
-    }
-}
-
-macro_rules! wl_container_of {
-    ($ptr: expr, $container: ty, $field: ident) => {
-        ($ptr as *mut u8).offset(-(offset_of!($container, $field) as isize)) as *mut $container
-    }
-}
-
-unsafe fn wl_signal_add(signal: *mut wl_signal, listener: *mut wl_listener) {
-    wl_list_insert((*signal).listener_list.prev, &mut (*listener).link);
 }
 
 // ----------------
@@ -474,7 +319,7 @@ unsafe extern "C" fn server_cursor_axis(listener: *mut wl_listener, data: *mut f
     )
 }
 
-unsafe extern "C" fn server_cursor_frame(listener: *mut wl_listener, data: *mut ffi::c_void) {
+unsafe extern "C" fn server_cursor_frame(listener: *mut wl_listener, _data: *mut ffi::c_void) {
     let server = &mut *wl_container_of!(listener, Server, cursor_frame);
     wlr_seat_pointer_notify_frame(server.seat);
 }
@@ -812,7 +657,5 @@ fn main() {
         // Cleanup
         wl_display_destroy_clients(server.display);
         wl_display_destroy(server.display);
-
-
     }
 }
