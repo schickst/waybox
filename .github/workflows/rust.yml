@@ -15,6 +15,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: apt install
+      uses: ryankurte/action-apt@v0.1.0
+      with:
+         packages: "llvm llvm-dev"
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
