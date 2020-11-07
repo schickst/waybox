@@ -603,7 +603,7 @@ fn main() {
         // Set env var and log socket
         std::env::set_var("WAYLAND_DISPLAY", socket_str);
 
-        let log_str = ffi::CString::new("Running Waybar Wayland Compositor on display %s").unwrap();
+        let log_str = ffi::CString::new("Running waybox Wayland Compositor on display %s").unwrap();
         _wlr_log(wlr_log_importance_WLR_INFO, log_str.as_ptr(), socket);
 
         // missing something?
