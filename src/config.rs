@@ -2,8 +2,20 @@
 use std::process::*;
 use crate::wlr::*;
 
+pub struct Bar {
+    command: &str
+}
+
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+pub struct MenuEntry {
+    title: &str,
+    command: &str
+}
+
+
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct KeyBinding {
+    description: &'static str,
     key: &'static str,
     mod_key: &'static str,
     command: &'static str
@@ -11,10 +23,25 @@ pub struct KeyBinding {
 
 pub struct Configuration
 {
-    key_bindings: Vec<KeyBinding>
+    key_bindings: Vec<KeyBinding>,
+    menu: Vec<MenuEntry>,
+    bar: Bar
 }
 
 impl Configuration {
+    pub fn from_file(file: &str) {
+        let data = read_file(file);
+
+        // FIXME Deserialize with Serde
+    }
+
+    fn read_file(path: &str) -> String {
+        let file = File::open(path).expect("File not found");
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).expect("Unable to read file");
+        return contents;
+    }
+
     pub fn new() -> Configuration {
         Configuration{
             key_bindings: vec![

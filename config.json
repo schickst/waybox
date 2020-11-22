@@ -1,0 +1,35 @@
+{
+    "key_bindings": [
+        {
+            "description": "Open a terminal",
+            "key": "F1",
+            "mod_key": "Logo",
+            "command": "alacritty"
+        },
+        {
+            "description": "Run the launcher",
+            "key": "F2",
+            "mod_key": "Logo",
+            "command": "dmenu_run"
+        },
+        {
+            "description": "Close/Kill the focused window",
+            "key": "Q",
+            "mod_key": "Logo",
+            "command": "kill <focused_window>"
+        }
+    ],
+    "menu": [
+        {
+            "title": "Terminal",
+            "command": "alacritty"
+        },
+        {
+            "title": "Exit",
+            "command": ""
+        }
+    ],
+    "bar": {
+        "command": "waybar"
+    }
+}
