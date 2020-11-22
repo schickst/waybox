@@ -1,15 +1,17 @@
 
 use std::process::*;
+use std::fs::*;
+use std::io::*;
 use crate::wlr::*;
 
 pub struct Bar {
-    command: &str
+    command: &'static str
 }
 
 #[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub struct MenuEntry {
-    title: &str,
-    command: &str
+    title: &'static str,
+    command: &'static str
 }
 
 
@@ -29,14 +31,20 @@ pub struct Configuration
 }
 
 impl Configuration {
-    pub fn from_file(file: &str) {
-        let data = read_file(file);
+    pub fn from_file(file: &str) -> Configuration {
+        let data = Configuration::read_file(file);
 
         // FIXME Deserialize with Serde
+
+        Configuration {
+            key_bindings: Vec::new(),
+            menu: Vec::new(),
+            bar: Bar { command: "" }
+        }
     }
 
     fn read_file(path: &str) -> String {
-        let file = File::open(path).expect("File not found");
+        let mut file = File::open(path).expect("File not found");
         let mut contents = String::new();
         file.read_to_string(&mut contents).expect("Unable to read file");
         return contents;
@@ -45,13 +53,27 @@ impl Configuration {
     pub fn new() -> Configuration {
         Configuration{
             key_bindings: vec![
-                // Start a Terminal
-                KeyBinding { key: "F1", mod_key: "Logo", command: "termite" },
-                // Run the launcher
-                KeyBinding { key: "F2", mod_key: "Logo", command: "dmenu_run" },
-                // Close/Kill the focued Window
-                KeyBinding { key: "Q", mod_key: "Logo", command: "kill <focused_window>" },
-            ]
+                KeyBinding {
+                    description: "Start a Terminal",
+                    key: "F1",
+                    mod_key: "Logo",
+                    command: "termite"
+                },
+                KeyBinding {
+                    description: "Run the launcher",
+                    key: "F2",
+                    mod_key: "Logo",
+                    command: "dmenu_run"
+                },
+                KeyBinding {
+                    description: "Close/Kill the focued Window",
+                    key: "Q",
+                    mod_key: "Logo",
+                    command: "kill <focused_window>"
+                },
+            ],
+            menu: Vec::new(),
+            bar: Bar{ command: "waybar" }
         }
     }
 
