@@ -106,7 +106,7 @@ impl Server {
                 outputs: Vec::new(),
                 new_output,
 
-                configuration: Configuration::new()
+                configuration: Configuration::from_file("config.json")
             }
         }
     }

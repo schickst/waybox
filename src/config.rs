@@ -1,28 +1,28 @@
-
 use std::process::*;
 use std::fs::*;
 use std::io::*;
 use crate::wlr::*;
 
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct Bar {
-    command: &'static str
+    command: String
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct MenuEntry {
-    title: &'static str,
-    command: &'static str
+    title: String,
+    command: String
 }
 
-
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct KeyBinding {
-    description: &'static str,
-    key: &'static str,
-    mod_key: &'static str,
-    command: &'static str
+    description: String,
+    key: String,
+    mod_key: String,
+    command: String
 }
 
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct Configuration
 {
     key_bindings: Vec<KeyBinding>,
@@ -33,14 +33,8 @@ pub struct Configuration
 impl Configuration {
     pub fn from_file(file: &str) -> Configuration {
         let data = Configuration::read_file(file);
-
-        // FIXME Deserialize with Serde
-
-        Configuration {
-            key_bindings: Vec::new(),
-            menu: Vec::new(),
-            bar: Bar { command: "" }
-        }
+        let config: Configuration = serde_json::from_str(&data).expect("Unable to read configuration");
+        return config;
     }
 
     fn read_file(path: &str) -> String {
@@ -50,40 +44,13 @@ impl Configuration {
         return contents;
     }
 
-    pub fn new() -> Configuration {
-        Configuration{
-            key_bindings: vec![
-                KeyBinding {
-                    description: "Start a Terminal",
-                    key: "F1",
-                    mod_key: "Logo",
-                    command: "termite"
-                },
-                KeyBinding {
-                    description: "Run the launcher",
-                    key: "F2",
-                    mod_key: "Logo",
-                    command: "dmenu_run"
-                },
-                KeyBinding {
-                    description: "Close/Kill the focued Window",
-                    key: "Q",
-                    mod_key: "Logo",
-                    command: "kill <focused_window>"
-                },
-            ],
-            menu: Vec::new(),
-            bar: Bar{ command: "waybar" }
-        }
-    }
-
     pub fn matches_modifiers(&self, modifiers: u32) -> bool {
-        let mod_keys: Vec<&'static str> = self.key_bindings.iter()
-                                                           .map(|f| f.mod_key)
+        let mod_keys: Vec<String> = self.key_bindings.iter()
+                                                           .map(|f| f.mod_key.clone())
                                                            .collect();
 
         for mod_key in mod_keys {
-            match mod_key {
+            match mod_key.as_str() {
                 "Logo" => return modifiers & (wlr_keyboard_modifier_WLR_MODIFIER_LOGO) != 0,
                 "Alt" => return modifiers & (wlr_keyboard_modifier_WLR_MODIFIER_ALT) != 0,
                 &_ => continue
@@ -106,7 +73,7 @@ impl Configuration {
         let binding = self.key_bindings.iter().find(|x| x.key == key);
 
         match binding {
-            Some(b) => self.execute_command(b.command),
+            Some(b) => self.execute_command(&b.command),
             _ => false
         }
     }
