@@ -1,40 +1,56 @@
-
 use std::process::*;
+use std::fs::*;
+use std::io::*;
 use crate::wlr::*;
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
-pub struct KeyBinding {
-    key: &'static str,
-    mod_key: &'static str,
-    command: &'static str
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+pub struct Bar {
+    command: String
 }
 
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+pub struct MenuEntry {
+    title: String,
+    command: String
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+pub struct KeyBinding {
+    description: String,
+    key: String,
+    mod_key: String,
+    command: String
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct Configuration
 {
-    key_bindings: Vec<KeyBinding>
+    key_bindings: Vec<KeyBinding>,
+    menu: Vec<MenuEntry>,
+    bar: Bar
 }
 
 impl Configuration {
-    pub fn new() -> Configuration {
-        Configuration{
-            key_bindings: vec![
-                // Start a Terminal
-                KeyBinding { key: "F1", mod_key: "Logo", command: "termite" },
-                // Run the launcher
-                KeyBinding { key: "F2", mod_key: "Logo", command: "dmenu_run" },
-                // Close/Kill the focued Window
-                KeyBinding { key: "Q", mod_key: "Logo", command: "kill <focused_window>" },
-            ]
-        }
+    pub fn from_file(file: &str) -> Configuration {
+        let data = Configuration::read_file(file);
+        let config: Configuration = serde_json::from_str(&data).expect("Unable to read configuration");
+        return config;
+    }
+
+    fn read_file(path: &str) -> String {
+        let mut file = File::open(path).expect("File not found");
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).expect("Unable to read file");
+        return contents;
     }
 
     pub fn matches_modifiers(&self, modifiers: u32) -> bool {
-        let mod_keys: Vec<&'static str> = self.key_bindings.iter()
-                                                           .map(|f| f.mod_key)
+        let mod_keys: Vec<String> = self.key_bindings.iter()
+                                                           .map(|f| f.mod_key.clone())
                                                            .collect();
 
         for mod_key in mod_keys {
-            match mod_key {
+            match mod_key.as_str() {
                 "Logo" => return modifiers & (wlr_keyboard_modifier_WLR_MODIFIER_LOGO) != 0,
                 "Alt" => return modifiers & (wlr_keyboard_modifier_WLR_MODIFIER_ALT) != 0,
                 &_ => continue
@@ -57,7 +73,7 @@ impl Configuration {
         let binding = self.key_bindings.iter().find(|x| x.key == key);
 
         match binding {
-            Some(b) => self.execute_command(b.command),
+            Some(b) => self.execute_command(&b.command),
             _ => false
         }
     }
