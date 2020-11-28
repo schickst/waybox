@@ -1,5 +1,6 @@
 #[macro_use] extern crate serde_derive;
 
+use std::env;
 use std::ffi;
 use std::mem;
 use std::pin::Pin;
@@ -535,6 +536,13 @@ unsafe extern "C" fn render_surface (surface: *mut wlr_surface, sx: i32, sy: i32
 
 
 fn main() {
+
+    let configuration = Configuration::from_file("config.json");
+
+    env::set_var("XKB_DEFAULT_LAYOUT", &configuration.keyboard.layout);
+    env::set_var("XKB_DEFAULT_VARIANT", &configuration.keyboard.variant);
+    env::set_var("XKB_DEFAULT_MODEL", &configuration.keyboard.model);
+
     println!("Hello, waybox!");
 
     lazy_static::initialize(&START_TIME);
@@ -543,7 +551,7 @@ fn main() {
         wlr_log_init(wlr_log_importance_WLR_DEBUG, None);
 
         // Initialize Server
-        let mut server = Server::new();
+        let mut server = Server::new(configuration);
 
         wlr_renderer_init_wl_display(server.renderer, server.display);
         wlr_compositor_create(server.display, server.renderer);

@@ -1,4 +1,9 @@
 {
+    "keyboard": {
+        "layout": "de",
+        "variant": "nodeadkeys",
+        "model": "pc105"
+    },
     "key_bindings": [
         {
             "description": "Open a terminal",

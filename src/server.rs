@@ -47,7 +47,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new() -> Server {
+    pub fn new(configuration: Configuration) -> Server {
         unsafe {
             let display = wl_display_create();
             let backend = wlr_backend_autocreate(display, None);
@@ -106,7 +106,7 @@ impl Server {
                 outputs: Vec::new(),
                 new_output,
 
-                configuration: Configuration::from_file("config.json")
+                configuration: configuration
             }
         }
     }

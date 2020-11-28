@@ -9,6 +9,13 @@ pub struct Bar {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
+pub struct KeyboardConfig {
+    pub layout: String,
+    pub variant: String,
+    pub model: String,
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct MenuEntry {
     title: String,
     command: String
@@ -25,9 +32,10 @@ pub struct KeyBinding {
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct Configuration
 {
-    key_bindings: Vec<KeyBinding>,
-    menu: Vec<MenuEntry>,
-    bar: Bar
+    pub keyboard: KeyboardConfig,
+    pub key_bindings: Vec<KeyBinding>,
+    pub menu: Vec<MenuEntry>,
+    pub bar: Bar
 }
 
 impl Configuration {
