@@ -16,6 +16,9 @@ pub struct Server {
     pub xdg_shell: *mut wlr_xdg_shell,
     pub new_xdg_surface: wl_listener,
 
+    pub layer_shell: *mut wlr_layer_shell_v1,
+    pub layer_shell_surface: wl_listener,
+
     pub views: Vec<Pin<Box<View>>>,
     pub views_idx: usize,
 
@@ -56,6 +59,8 @@ impl Server {
             let views = Vec::new();
             let xdg_shell = wlr_xdg_shell_create(display);
             let new_xdg_surface = mem::zeroed();
+            let layer_shell = wlr_layer_shell_v1_create(display);
+            let layer_shell_surface = mem::zeroed();
 
             let cursor = wlr_cursor_create();
             let cursor_axis = mem::zeroed();
@@ -81,6 +86,9 @@ impl Server {
                 views_idx: 0,
                 xdg_shell,
                 new_xdg_surface,
+
+                layer_shell,
+                layer_shell_surface,
 
                 cursor,
                 cursor_axis,
@@ -156,4 +164,91 @@ impl Server {
         self.keyboards.push(keyboard);
     }
 
+}
+
+
+
+pub unsafe extern "C" fn server_new_output(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    let server = &mut *(wl_container_of!(listener, Server, new_output));
+    let wlr_output = &mut *(data as *mut wlr_output);
+
+    if !(wl_list_empty(&wlr_output.modes) != 0) {
+        let mode = wlr_output_preferred_mode(wlr_output);
+        wlr_output_set_mode(wlr_output, mode);
+        wlr_output_enable(wlr_output, true);
+
+        if !wlr_output_commit(wlr_output) {
+            return;
+        }
+    }
+
+    // FIXME impl Output new()
+    let mut output: Pin<Box<Output>> = Box::pin(mem::zeroed());
+    output.wlr_output = wlr_output;
+    output.server = server;
+    output.frame.notify = Some(output_frame);
+
+    wl_signal_add(&mut wlr_output.events.frame, &mut output.frame);
+    server.outputs.push(output);
+
+    wlr_output_layout_add_auto(server.output_layout, wlr_output);
+}
+
+
+
+pub unsafe extern "C" fn server_new_xdg_surface(listener: *mut wl_listener, data: *mut ffi::c_void) {
+    let server = wl_container_of!(listener, Server, new_xdg_surface);
+    let xdg_surface = data as *mut wlr_xdg_surface;
+
+    dbg!(xdg_surface);
+
+    if (*xdg_surface).role != wlr_xdg_surface_role_WLR_XDG_SURFACE_ROLE_TOPLEVEL {
+        return;
+    }
+
+    let mut map: wl_listener = mem::zeroed();
+    map.notify = Some(xdg_surface_map);
+
+    let mut unmap: wl_listener = mem::zeroed();
+    unmap.notify = Some(xdg_surface_unmap);
+
+    let mut destroy: wl_listener = mem::zeroed();
+    destroy.notify = Some(xdg_surface_destroy);
+
+    let mut request_move: wl_listener = mem::zeroed();
+    request_move.notify = Some(xdg_toplevel_request_move);
+
+    let mut request_resize: wl_listener = mem::zeroed();
+    request_resize.notify = Some(xdg_toplevel_request_resize);
+
+    let link = mem::zeroed();
+
+    let mut view = Box::pin(
+        View {
+            link,
+            server,
+            xdg_surface,
+
+            map,
+            unmap,
+            destroy,
+            request_move,
+            request_resize,
+
+            mapped: false,
+            x: 0,
+            y: 0
+        }
+    );
+    dbg!(view.xdg_surface);
+
+    wl_signal_add(&mut (*xdg_surface).events.map, &mut view.map);
+    wl_signal_add(&mut (*xdg_surface).events.unmap, &mut view.unmap);
+    wl_signal_add(&mut (*xdg_surface).events.destroy, &mut view.destroy);
+
+    let toplevel = (*xdg_surface).__bindgen_anon_1.toplevel; // very pretty
+    wl_signal_add(&mut (*toplevel).events.request_move, &mut view.request_move);
+    wl_signal_add(&mut (*toplevel).events.request_resize, &mut view.request_resize);
+
+    (*server).views.push(view);
 }
