@@ -2,7 +2,45 @@
 name = "waybox"
 version = "0.1.0"
 edition = "2018"
+authors = ["Stefan Schick <stefan.schick@stecug.de>"]
+license = "GPL-3.0-or-later"
+description = "A wayland compositor similar to fluxbox or openbox"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+smithay = { git = "https://github.com/Smithay/smithay.git", default-features = false, features = [ "renderer_glium", "backend_egl", "wayland_frontend" ] }
+bitflags = "1.2.1"
+glium = { version = "0.29.0", default-features = false }
+input = { version = "0.5.0", features = ["udev"], optional = true }
+rand = "0.8"
+slog = { version = "2.1.1" }
+slog-term = "2.3"
+slog-async = "2.2"
+xkbcommon = "0.4.0"
+lazy_static = "*"
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
+
+
+
+[dependencies.x11rb]
+optional = true
+version = "0.7"
+default-features = false
+features = [ "composite" ]
+
+[build-dependencies]
+gl_generator = "0.14"
+
+[features]
+default = [ "winit", "egl", "udev", "logind", "xwayland" ]
+egl = [ "smithay/use_system_lib" ]
+winit = [ "smithay/backend_winit" ]
+udev = [ "smithay/backend_libinput", "smithay/backend_udev", "smithay/backend_drm_atomic", "smithay/backend_drm_legacy", "smithay/backend_drm_gbm", "smithay/backend_drm_eglstream", "smithay/backend_drm_egl", "smithay/backend_session", "input" ]
+logind = [ "smithay/backend_session_logind" ]
+elogind = ["logind", "smithay/backend_session_elogind" ]
+xwayland = [ "smithay/xwayland", "x11rb" ]
+test_all_features = ["default"]
