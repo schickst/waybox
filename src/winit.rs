@@ -97,9 +97,13 @@ pub fn run_winit(
     info!(log, "Initialization completed, starting the main loop.");
 
     while state.running.load(Ordering::SeqCst) {
-        input
-            .dispatch_new_events(|event, _| state.process_input_event(event))
-            .unwrap();
+        let input_status = input
+            .dispatch_new_events(|event, _| state.process_input_event(event));
+
+        if input_status.is_err() {
+            error!(log, "Error during input dispatch: {:?}", input_status.unwrap_err());
+            break;
+        }
 
         // Send frame events so that client start drawing their next frame
         state

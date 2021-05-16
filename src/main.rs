@@ -5,7 +5,7 @@
 #[macro_use(define_roles)] extern crate smithay;
 #[macro_use] extern crate serde_derive;
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, env};
 
 use slog::Drain;
 use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
@@ -46,6 +46,10 @@ fn main() {
     );
 
     let config = Configuration::from_file("./config.json");
+
+    env::set_var("XKB_DEFAULT_LAYOUT", &config.keyboard.layout);
+    env::set_var("XKB_DEFAULT_VARIANT", &config.keyboard.variant);
+    env::set_var("XKB_DEFAULT_MODEL", &config.keyboard.model);
 
     let mut event_loop = EventLoop::<AnvilState>::new().unwrap();
     let display = Rc::new(RefCell::new(Display::new()));
