@@ -101,6 +101,7 @@ pub fn run_winit(
             .dispatch_new_events(|event, _| state.process_input_event(event));
 
         if input_status.is_err() {
+            state.running.store(false, Ordering::SeqCst);
             error!(log, "Error during input dispatch: {:?}", input_status.unwrap_err());
             break;
         }
