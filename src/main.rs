@@ -1,22 +1,20 @@
 #![warn(rust_2018_idioms)]
 
-#[macro_use] extern crate glium;
-#[macro_use] extern crate slog;
-#[macro_use(define_roles)] extern crate smithay;
+#[macro_use]
+extern crate slog;
+#[macro_use(define_roles)]
+extern crate smithay;
 #[macro_use] extern crate serde_derive;
 
-use std::{cell::RefCell, rc::Rc, env};
+
+use std::{cell::RefCell, rc::Rc};
 
 use slog::Drain;
-use smithay::reexports::{calloop::EventLoop, wayland_server::Display};
+use smithay::{reexports::{calloop::EventLoop, wayland_server::Display}, wayland::seat::ModifiersState};
 
-#[macro_use]
-mod shaders;
-mod buffer_utils;
-mod glium_drawer;
+mod drawing;
 mod input_handler;
 mod shell;
-mod shm_load;
 mod state;
 #[cfg(feature = "udev")]
 mod udev;
@@ -25,11 +23,12 @@ mod window_map;
 mod winit;
 #[cfg(feature = "xwayland")]
 mod xwayland;
+mod custom;
 
-mod config;
-
+use custom::Configuration;
+use crate::custom::config::RawConfiguration;
 use state::AnvilState;
-use config::Configuration;
+
 
 static POSSIBLE_BACKENDS: &[&str] = &[
     #[cfg(feature = "winit")]
@@ -42,14 +41,14 @@ fn main() {
     // A logger facility, here we use the terminal here
     let log = slog::Logger::root(
         slog_async::Async::default(slog_term::term_full().fuse()).fuse(),
+        //std::sync::Mutex::new(slog_term::term_full().fuse()).fuse(),
         o!(),
     );
 
-    let config = Configuration::from_file("./config.json");
+    let config = Configuration::new("./config.json");
 
-    env::set_var("XKB_DEFAULT_LAYOUT", &config.keyboard.layout);
-    env::set_var("XKB_DEFAULT_VARIANT", &config.keyboard.variant);
-    env::set_var("XKB_DEFAULT_MODEL", &config.keyboard.model);
+    let mods = ModifiersState::default();
+    println!("{:?}", mods);
 
     let mut event_loop = EventLoop::<AnvilState>::new().unwrap();
     let display = Rc::new(RefCell::new(Display::new()));
@@ -59,14 +58,14 @@ fn main() {
         #[cfg(feature = "winit")]
         Some("--winit") => {
             info!(log, "Starting anvil with winit backend");
-            if let Err(()) = winit::run_winit(display, &mut event_loop, log.clone(), config) {
+            if let Err(()) = winit::run_winit(display, &mut event_loop, log.clone()) {
                 crit!(log, "Failed to initialize winit backend.");
             }
         }
         #[cfg(feature = "udev")]
         Some("--tty-udev") => {
             info!(log, "Starting anvil on a tty using udev");
-            if let Err(()) = udev::run_udev(display, &mut event_loop, log.clone(), config) {
+            if let Err(()) = udev::run_udev(display, &mut event_loop, log.clone()) {
                 crit!(log, "Failed to initialize tty backend.");
             }
         }

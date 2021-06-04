@@ -1,3 +1,4 @@
+use crate::custom::CONFIGURATION;
 use std::{
     cell::RefCell,
     rc::Rc,
@@ -23,17 +24,18 @@ use smithay::{
     },
 };
 
+#[cfg(feature = "egl")]
+use smithay::backend::egl::display::EGLBufferReader;
 #[cfg(feature = "udev")]
 use smithay::backend::session::{auto::AutoSession, Session};
 #[cfg(feature = "xwayland")]
 use smithay::xwayland::XWayland;
 
+use crate::shell::init_shell;
 #[cfg(feature = "udev")]
 use crate::udev::MyOutput;
 #[cfg(feature = "xwayland")]
 use crate::xwayland::XWm;
-use crate::{buffer_utils::BufferUtils, shell::init_shell};
-use crate::config::Configuration;
 
 pub struct AnvilState {
     pub socket_name: String,
@@ -44,8 +46,6 @@ pub struct AnvilState {
     pub window_map: Rc<RefCell<crate::window_map::WindowMap<crate::shell::Roles>>>,
     pub dnd_icon: Arc<Mutex<Option<WlSurface>>>,
     pub log: slog::Logger,
-    // configuration
-    pub config: Configuration,
     // input-related fields
     pub pointer: PointerHandle,
     pub keyboard: KeyboardHandle,
@@ -66,13 +66,12 @@ impl AnvilState {
     pub fn init(
         display: Rc<RefCell<Display>>,
         handle: LoopHandle<AnvilState>,
-        buffer_utils: BufferUtils,
+        #[cfg(feature = "egl")] egl_reader: Rc<RefCell<Option<EGLBufferReader>>>,
         #[cfg(feature = "udev")] session: Option<AutoSession>,
         #[cfg(not(feature = "udev"))] _session: Option<()>,
         #[cfg(feature = "udev")] output_map: Option<Rc<RefCell<Vec<MyOutput>>>>,
         #[cfg(not(feature = "udev"))] _output_map: Option<()>,
         log: slog::Logger,
-        config: Configuration
     ) -> AnvilState {
         // init the wayland connection
         let _wayland_event_source = handle
@@ -100,7 +99,10 @@ impl AnvilState {
 
         init_shm_global(&mut display.borrow_mut(), vec![], log.clone());
 
-        let shell_handles = init_shell(&mut display.borrow_mut(), buffer_utils, log.clone());
+        #[cfg(feature = "egl")]
+        let shell_handles = init_shell(&mut display.borrow_mut(), egl_reader, log.clone());
+        #[cfg(not(feature = "egl"))]
+        let shell_handles = init_shell(&mut display.borrow_mut(), log.clone());
 
         let socket_name = display
             .borrow_mut()
@@ -158,7 +160,7 @@ impl AnvilState {
         });
 
         let keyboard = seat
-            .add_keyboard(XkbConfig::default(), 200, 25, |seat, focus| {
+            .add_keyboard(CONFIGURATION.get_seat_xkbconfig(), 200, 25, |seat, focus| {
                 set_data_device_focus(seat, focus.and_then(|s| s.as_ref().client()))
             })
             .expect("Failed to initialize the keyboard");
@@ -182,7 +184,6 @@ impl AnvilState {
             window_map: shell_handles.window_map,
             dnd_icon,
             log,
-            config,
             socket_name,
             pointer,
             keyboard,

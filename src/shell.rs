@@ -4,7 +4,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[cfg(feature = "egl")]
+use smithay::backend::egl::display::EGLBufferReader;
 use smithay::{
+    backend::renderer::buffer_dimensions,
     reexports::{
         wayland_protocols::xdg_shell::server::xdg_toplevel,
         wayland_server::{
@@ -33,10 +36,7 @@ use smithay::{
     },
 };
 
-use crate::{
-    buffer_utils::BufferUtils,
-    window_map::{Kind as SurfaceKind, WindowMap},
-};
+use crate::window_map::{Kind as SurfaceKind, WindowMap};
 
 #[cfg(feature = "xwayland")]
 use crate::xwayland::X11SurfaceRole;
@@ -308,7 +308,11 @@ pub struct ShellHandles {
     pub window_map: Rc<RefCell<MyWindowMap>>,
 }
 
-pub fn init_shell(display: &mut Display, buffer_utils: BufferUtils, log: ::slog::Logger) -> ShellHandles {
+pub fn init_shell(
+    display: &mut Display,
+    #[cfg(feature = "egl")] egl_reader: Rc<RefCell<Option<EGLBufferReader>>>,
+    log: ::slog::Logger,
+) -> ShellHandles {
     // TODO: this is awkward...
     let almost_window_map = Rc::new(RefCell::new(None::<Rc<RefCell<MyWindowMap>>>));
     let almost_window_map_compositor = almost_window_map.clone();
@@ -320,7 +324,14 @@ pub fn init_shell(display: &mut Display, buffer_utils: BufferUtils, log: ::slog:
             SurfaceEvent::Commit => {
                 let window_map = almost_window_map_compositor.borrow();
                 let window_map = window_map.as_ref().unwrap();
-                surface_commit(&surface, ctoken, &buffer_utils, &*window_map)
+                #[cfg(feature = "egl")]
+                {
+                    surface_commit(&surface, ctoken, egl_reader.borrow().as_ref(), &*window_map)
+                }
+                #[cfg(not(feature = "egl"))]
+                {
+                    surface_commit(&surface, ctoken, &*window_map)
+                }
             }
         },
         log.clone(),
@@ -666,13 +677,13 @@ pub struct CommitedState {
     pub buffer: Option<wl_buffer::WlBuffer>,
     pub input_region: Option<RegionAttributes>,
     pub dimensions: Option<(i32, i32)>,
-    pub frame_callback: Option<wl_callback::WlCallback>,
+    pub frame_callbacks: Vec<wl_callback::WlCallback>,
     pub sub_location: (i32, i32),
 }
 
 #[derive(Default)]
 pub struct SurfaceData {
-    pub texture: Option<crate::buffer_utils::BufferTextures>,
+    pub texture: Option<Box<dyn std::any::Any + 'static>>,
     pub geometry: Option<Rectangle>,
     pub resize_state: ResizeState,
     /// Minimum width and height, as requested by the surface.
@@ -723,12 +734,6 @@ impl SurfaceData {
                 buffer.release();
             }
         }
-        // ping the previous callback if relevant
-        if into.frame_callback != next.frame_callback {
-            if let Some(callback) = into.frame_callback.take() {
-                callback.done(0);
-            }
-        }
 
         *into = next;
         new_buffer
@@ -773,7 +778,7 @@ impl SurfaceData {
 
     /// Send the frame callback if it had been requested
     pub fn send_frame(&mut self, time: u32) {
-        if let Some(callback) = self.current_state.frame_callback.take() {
+        for callback in self.current_state.frame_callbacks.drain(..) {
             callback.done(time);
         }
     }
@@ -782,7 +787,7 @@ impl SurfaceData {
 fn surface_commit(
     surface: &wl_surface::WlSurface,
     token: CompositorToken<Roles>,
-    buffer_utils: &BufferUtils,
+    #[cfg(feature = "egl")] egl_reader: Option<&EGLBufferReader>,
     window_map: &RefCell<MyWindowMap>,
 ) {
     #[cfg(feature = "xwayland")]
@@ -834,7 +839,14 @@ fn surface_commit(
         match attributes.buffer.take() {
             Some(BufferAssignment::NewBuffer { buffer, .. }) => {
                 // new contents
-                next_state.dimensions = buffer_utils.dimensions(&buffer);
+                #[cfg(feature = "egl")]
+                {
+                    next_state.dimensions = buffer_dimensions(&buffer, egl_reader);
+                }
+                #[cfg(not(feature = "egl"))]
+                {
+                    next_state.dimensions = buffer_dimensions(&buffer, None);
+                }
                 next_state.buffer = Some(buffer);
             }
             Some(BufferAssignment::Removed) => {
@@ -845,12 +857,10 @@ fn surface_commit(
             None => {}
         }
 
-        if let Some(frame_cb) = attributes.frame_callback.take() {
-            if let Some(old_cb) = next_state.frame_callback.take() {
-                old_cb.done(0);
-            }
-            next_state.frame_callback = Some(frame_cb);
-        }
+        // Append the current frame callbacks to the next state
+        next_state
+            .frame_callbacks
+            .extend(attributes.frame_callbacks.drain(..));
 
         data.apply_cache(next_state);
 
