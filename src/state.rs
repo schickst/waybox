@@ -1,4 +1,4 @@
-use crate::custom::CONFIGURATION;
+use crate::custom::Configuration;
 use std::{
     cell::RefCell,
     rc::Rc,
@@ -19,7 +19,7 @@ use smithay::{
     wayland::{
         compositor::CompositorToken,
         data_device::{default_action_chooser, init_data_device, set_data_device_focus, DataDeviceEvent},
-        seat::{CursorImageStatus, KeyboardHandle, PointerHandle, Seat, XkbConfig},
+        seat::{CursorImageStatus, KeyboardHandle, PointerHandle, Seat},
         shm::init_shm_global,
     },
 };
@@ -45,6 +45,7 @@ pub struct AnvilState {
     pub ctoken: CompositorToken<crate::shell::Roles>,
     pub window_map: Rc<RefCell<crate::window_map::WindowMap<crate::shell::Roles>>>,
     pub dnd_icon: Arc<Mutex<Option<WlSurface>>>,
+    pub config: Configuration,
     pub log: slog::Logger,
     // input-related fields
     pub pointer: PointerHandle,
@@ -71,6 +72,7 @@ impl AnvilState {
         #[cfg(not(feature = "udev"))] _session: Option<()>,
         #[cfg(feature = "udev")] output_map: Option<Rc<RefCell<Vec<MyOutput>>>>,
         #[cfg(not(feature = "udev"))] _output_map: Option<()>,
+        config: Configuration,
         log: slog::Logger,
     ) -> AnvilState {
         // init the wayland connection
@@ -160,7 +162,7 @@ impl AnvilState {
         });
 
         let keyboard = seat
-            .add_keyboard(CONFIGURATION.get_seat_xkbconfig(), 200, 25, |seat, focus| {
+            .add_keyboard(config.get_seat_xkbconfig(), 200, 25, |seat, focus| {
                 set_data_device_focus(seat, focus.and_then(|s| s.as_ref().client()))
             })
             .expect("Failed to initialize the keyboard");
@@ -183,6 +185,7 @@ impl AnvilState {
             ctoken: shell_handles.token,
             window_map: shell_handles.window_map,
             dnd_icon,
+            config,
             log,
             socket_name,
             pointer,

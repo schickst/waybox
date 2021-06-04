@@ -14,12 +14,13 @@ use smithay::{
 
 use slog::Logger;
 
-use crate::drawing::*;
+use crate::{custom::Configuration, drawing::*};
 use crate::state::AnvilState;
 
 pub fn run_winit(
     display: Rc<RefCell<Display>>,
     event_loop: &mut EventLoop<AnvilState>,
+    config: Configuration,
     log: Logger,
 ) -> Result<(), ()> {
     let (renderer, mut input) = winit::init(log.clone()).map_err(|err| {
@@ -50,6 +51,7 @@ pub fn run_winit(
         Rc::new(RefCell::new(reader.clone())),
         None,
         None,
+        config,
         log.clone(),
     );
 
@@ -85,6 +87,7 @@ pub fn run_winit(
     let mut cursor_visible = true;
 
     info!(log, "Initialization completed, starting the main loop.");
+    state.config.bar.spawn();
 
     while state.running.load(Ordering::SeqCst) {
         if input

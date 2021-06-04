@@ -1,4 +1,4 @@
-use crate::custom::{CONFIGURATION, KeyAction};
+use crate::custom::{KeyAction};
 use std::{process::Command, sync::atomic::Ordering};
 
 use crate::AnvilState;
@@ -31,6 +31,34 @@ impl AnvilState {
         }
     }
 
+
+    fn process_keyboard_shortcut(&self, modifiers: ModifiersState, keysym: Keysym) -> KeyAction {
+        let action = self.config.key_bindings.process_keyboard_shortcut(modifiers, keysym);
+    
+        if action != KeyAction::Forward {
+            return action;
+        }
+    
+        if modifiers.ctrl && modifiers.alt && keysym == xkb::KEY_BackSpace
+            || modifiers.logo && keysym == xkb::KEY_q
+        {
+            // ctrl+alt+backspace = quit
+            // logo + q = quit
+            KeyAction::Quit
+        } else if (xkb::KEY_XF86Switch_VT_1..=xkb::KEY_XF86Switch_VT_12).contains(&keysym) {
+            // VTSwicth
+            KeyAction::VtSwitch((keysym - xkb::KEY_XF86Switch_VT_1 + 1) as i32)
+        } else if modifiers.logo && keysym == xkb::KEY_Return {
+            // run terminal
+            KeyAction::Run("weston-terminal".into())
+        } else if modifiers.logo && keysym >= xkb::KEY_1 && keysym <= xkb::KEY_9 {
+            KeyAction::Screen((keysym - xkb::KEY_1) as usize)
+        } else {
+            KeyAction::Forward
+        }
+    }
+    
+
     fn on_keyboard_key<B: InputBackend>(&mut self, evt: B::KeyboardKeyEvent) {
         let keycode = evt.key_code();
         let state = evt.state();
@@ -46,7 +74,7 @@ impl AnvilState {
                     "mods" => format!("{:?}", modifiers),
                     "keysym" => ::xkbcommon::xkb::keysym_get_name(keysym)
                 );
-                action = process_keyboard_shortcut(*modifiers, keysym);
+                action = self.process_keyboard_shortcut(*modifiers, keysym);
                 // forward to client only if action == KeyAction::Forward
                 // both for pressed and released, to avoid inconsistencies
                 matches!(action, KeyAction::Forward)
@@ -270,28 +298,3 @@ impl AnvilState {
 
 
 
-fn process_keyboard_shortcut(modifiers: ModifiersState, keysym: Keysym) -> KeyAction {
-    let action = CONFIGURATION.key_bindings.process_keyboard_shortcut(modifiers, keysym);
-
-    if action != KeyAction::Forward {
-        return action;
-    }
-
-    if modifiers.ctrl && modifiers.alt && keysym == xkb::KEY_BackSpace
-        || modifiers.logo && keysym == xkb::KEY_q
-    {
-        // ctrl+alt+backspace = quit
-        // logo + q = quit
-        KeyAction::Quit
-    } else if (xkb::KEY_XF86Switch_VT_1..=xkb::KEY_XF86Switch_VT_12).contains(&keysym) {
-        // VTSwicth
-        KeyAction::VtSwitch((keysym - xkb::KEY_XF86Switch_VT_1 + 1) as i32)
-    } else if modifiers.logo && keysym == xkb::KEY_Return {
-        // run terminal
-        KeyAction::Run("weston-terminal".into())
-    } else if modifiers.logo && keysym >= xkb::KEY_1 && keysym <= xkb::KEY_9 {
-        KeyAction::Screen((keysym - xkb::KEY_1) as usize)
-    } else {
-        KeyAction::Forward
-    }
-}

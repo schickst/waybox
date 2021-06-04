@@ -1,4 +1,4 @@
-use lazy_static::lazy_static;
+use slog::Logger;
 use smithay::wayland::seat::XkbConfig;
 use smithay::{wayland::seat::ModifiersState};
 use xkbcommon::xkb::keysym_from_name;
@@ -9,12 +9,13 @@ use self::config::{Bar, MenuEntry, RawConfiguration, RawKeyBinding};
 
 pub mod config;
 
-
+/*
 lazy_static! {
     pub static ref CONFIGURATION: Configuration = {     
         Configuration::new("./config.json")
     };
 }
+*/
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct KeyBinding {
@@ -54,11 +55,12 @@ pub struct Configuration {
     pub key_bindings: KeyBindings,
     pub menu: Vec<MenuEntry>,
     pub bar: Bar,
+    log: Logger
 }
 
 
 impl<'a> Configuration {
-    pub fn new(path: &str) -> Self {
+    pub fn new(path: &str, log: Logger) -> Self {
         let raw_config = RawConfiguration::from_file(path);
         
         let mut keybindings = KeyBindings::new();
@@ -67,12 +69,12 @@ impl<'a> Configuration {
             keybindings.add_keybinding(binding);
         }
         
-        
         Configuration {
             raw_config: raw_config,
             key_bindings: keybindings,
             menu: Vec::new(),
-            bar: Bar::new()
+            bar: Bar::new("waybar"),
+            log
         }
     }
 

@@ -10,7 +10,7 @@ extern crate smithay;
 use std::{cell::RefCell, rc::Rc};
 
 use slog::Drain;
-use smithay::{reexports::{calloop::EventLoop, wayland_server::Display}, wayland::seat::ModifiersState};
+use smithay::{reexports::{calloop::EventLoop, wayland_server::Display}};
 
 mod drawing;
 mod input_handler;
@@ -26,7 +26,6 @@ mod xwayland;
 mod custom;
 
 use custom::Configuration;
-use crate::custom::config::RawConfiguration;
 use state::AnvilState;
 
 
@@ -45,10 +44,7 @@ fn main() {
         o!(),
     );
 
-    let config = Configuration::new("./config.json");
-
-    let mods = ModifiersState::default();
-    println!("{:?}", mods);
+    let config = Configuration::new("./config.json", log.clone());
 
     let mut event_loop = EventLoop::<AnvilState>::new().unwrap();
     let display = Rc::new(RefCell::new(Display::new()));
@@ -58,14 +54,14 @@ fn main() {
         #[cfg(feature = "winit")]
         Some("--winit") => {
             info!(log, "Starting anvil with winit backend");
-            if let Err(()) = winit::run_winit(display, &mut event_loop, log.clone()) {
+            if let Err(()) = winit::run_winit(display, &mut event_loop, config, log.clone()) {
                 crit!(log, "Failed to initialize winit backend.");
             }
         }
         #[cfg(feature = "udev")]
         Some("--tty-udev") => {
             info!(log, "Starting anvil on a tty using udev");
-            if let Err(()) = udev::run_udev(display, &mut event_loop, log.clone()) {
+            if let Err(()) = udev::run_udev(display, &mut event_loop, config, log.clone()) {
                 crit!(log, "Failed to initialize tty backend.");
             }
         }

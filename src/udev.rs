@@ -59,7 +59,7 @@ use smithay::{
     },
 };
 
-use crate::drawing::*;
+use crate::{custom::Configuration, drawing::*};
 use crate::shell::{MyWindowMap, Roles};
 use crate::state::AnvilState;
 
@@ -74,6 +74,7 @@ impl AsRawFd for SessionFd {
 pub fn run_udev(
     display: Rc<RefCell<Display>>,
     event_loop: &mut EventLoop<AnvilState>,
+    config: Configuration,
     log: Logger,
 ) -> Result<(), ()> {
     let name = display
@@ -106,6 +107,7 @@ pub fn run_udev(
         egl_buffer_reader.clone(),
         Some(session),
         Some(output_map.clone()),
+        config,
         log.clone(),
     );
 

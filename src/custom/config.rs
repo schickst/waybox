@@ -1,6 +1,7 @@
 use std::env;
 use std::fs::*;
 use std::io::*;
+use std::process::Command;
 
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub struct Bar {
@@ -8,10 +9,16 @@ pub struct Bar {
 }
 
 impl Bar {
-    pub fn new() -> Self {
-        Bar { command: String::new() }
+    pub fn new(cmd: &str) -> Self {
+        Bar { command: String::from(cmd) }
     }
-    
+
+    pub fn spawn(&self) {
+        if let Err(e) = Command::new(&self.command).spawn() {
+            println!("Failed to start bar with command '{}'", self.command);
+            println!("Error: {:?}", e);
+        }
+    }
 }
 
 
