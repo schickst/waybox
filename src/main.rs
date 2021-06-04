@@ -44,7 +44,7 @@ fn main() {
         o!(),
     );
 
-    let config = Configuration::new("./config.json", log.clone());
+    let config = Configuration::parse("./config.json", log.clone());
 
     let mut event_loop = EventLoop::<AnvilState>::new().unwrap();
     let display = Rc::new(RefCell::new(Display::new()));

@@ -7,26 +7,26 @@
     "key_bindings": [
         {
             "description": "Open a terminal",
-            "key": "F1",
-            "mod_key": "Logo",
+            "keys": "F1",
+            "modifiers": "Logo",
             "command": "alacritty"
         },
         {
             "description": "Run the launcher",
-            "key": "F2",
-            "mod_key": "Logo",
+            "keys": "F2",
+            "modifiers": "Logo",
             "command": "dmenu_run"
         },
         {
             "description": "Run kate",
-            "key": "F3",
-            "mod_key": "Logo",
+            "keys": "F3",
+            "modifiers": "Logo",
             "command": "kate"
         },
         {
             "description": "Close/Kill the focused window",
-            "key": "Q",
-            "mod_key": "Logo",
+            "keys": "Q",
+            "modifiers": "Logo",
             "command": "kill <focused_window>"
         }
     ],

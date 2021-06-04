@@ -1,11 +1,16 @@
+use std::env;
+use std::fs::File;
+use std::io::Read;
+
+use serde_json::Value;
 use slog::Logger;
-use smithay::wayland::seat::XkbConfig;
 use smithay::{wayland::seat::ModifiersState};
 use xkbcommon::xkb::keysym_from_name;
 use xkbcommon::xkb::Keysym;
 use xkbcommon::xkb::KEYSYM_NO_FLAGS;
 
-use self::config::{Bar, MenuEntry, RawConfiguration, RawKeyBinding};
+use self::config::Keyboard;
+use self::config::{Bar, MenuEntry};
 
 pub mod config;
 
@@ -17,17 +22,61 @@ lazy_static! {
 }
 */
 
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct KeyBinding {
-    description: String,
-    key: Vec<Keysym>,
-    mod_key: ModifiersState,
-    command: String
+
+
+#[derive(Clone, Debug)]
+pub struct Configuration {
+    pub keyboard: Keyboard,
+    pub key_bindings: KeyBindings,
+    pub menu: Vec<MenuEntry>,
+    pub bar: Bar,
+    log: Logger
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub struct KeyBindings {
-    bindings: Vec<KeyBinding>
+
+impl<'a> Configuration {
+    pub fn new(log: Logger) -> Self {
+        Configuration {
+            keyboard: Keyboard::new(),
+            key_bindings: KeyBindings::new(),
+            menu: Vec::new(),
+            bar: Bar::new(""),
+            log
+        }
+    }
+
+    pub fn parse(file: &str, log: Logger) -> Configuration {
+        let data = Configuration::read_file(file);
+        let raw_config: Value =
+            serde_json::from_str(&data).expect("Unable to parse configuration");
+
+        let keyboard = Keyboard::from(raw_config["keyboard"].clone());
+
+        let raw_key_bindings = raw_config["key_bindings"].as_array().expect("Unable to parse key_bindings");
+        let mut key_bindings = KeyBindings::from(raw_key_bindings);
+
+        let bar = Bar::from(raw_config["bar"].clone());
+
+        Configuration {
+            keyboard,
+            key_bindings,
+            menu: Vec::new(),
+            bar,
+            log
+        }
+    }
+
+    fn read_file(path: &str) -> String {
+        if let Ok(current_path) = env::current_dir() {
+            println!("The current directory is {}", current_path.display());
+        }
+
+        let mut file = File::open(path).expect("File not found");
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)
+            .expect("Unable to read file");
+        contents
+    }
 }
 
 
@@ -49,63 +98,46 @@ pub enum KeyAction {
 }
 
 
-#[derive(Clone, Debug)]
-pub struct Configuration {
-    pub raw_config: RawConfiguration,
-    pub key_bindings: KeyBindings,
-    pub menu: Vec<MenuEntry>,
-    pub bar: Bar,
-    log: Logger
+
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct KeyBinding {
+    description: String,
+    keys: Vec<Keysym>,
+    modifiers: ModifiersState,
+    command: String
 }
 
 
-impl<'a> Configuration {
-    pub fn new(path: &str, log: Logger) -> Self {
-        let raw_config = RawConfiguration::from_file(path);
-        
-        let mut keybindings = KeyBindings::new();
+impl KeyBinding {
+    fn from(value: Value) -> Self {
+        let description = value["description"].as_str().expect("msg");
+        let keys = value["keys"].as_str().expect("msg");
+        let modifiers = value["modifiers"].as_str().expect("msg");
+        let command = value["command"].as_str().expect("msg");
 
-        for binding in &raw_config.key_bindings {
-            keybindings.add_keybinding(binding);
-        }
-        
-        Configuration {
-            raw_config: raw_config,
-            key_bindings: keybindings,
-            menu: Vec::new(),
-            bar: Bar::new("waybar"),
-            log
-        }
-    }
-
-    pub fn get_seat_xkbconfig(&'a self) -> XkbConfig<'a> {
-        XkbConfig {
-            model: &self.raw_config.keyboard.model,
-            layout: &self.raw_config.keyboard.layout,
-            variant: &self.raw_config.keyboard.variant,
-            ..XkbConfig::default()
-        }
-    }
-}
-
-
-
-impl KeyBindings {
-    fn new() -> Self {
-        KeyBindings { bindings: Vec::new() }
-    }
-
-    fn add_keybinding(&mut self, config_keybinding: &RawKeyBinding) {
         let binding = KeyBinding {
-            description: config_keybinding.description.clone(),
-            key: vec![ keysym_from_name(&config_keybinding.key, KEYSYM_NO_FLAGS) ],
-            mod_key: self.parse_modkeys(&config_keybinding.mod_key),
-            command: config_keybinding.command.clone()
+            description: String::from(description),
+            keys: KeyBinding::parse_keysyms(keys),
+            modifiers: KeyBinding::parse_modkeys(modifiers),
+            command: String::from(command)
         };
-        self.bindings.push(binding);
+        binding
     }
 
-    fn parse_modkeys(&self, data: &str) -> ModifiersState {
+
+    fn parse_keysyms(data: &str) -> Vec<Keysym> {
+        let tokens = data.split(" ");
+        let mut keysyms = Vec::new();
+
+        for token in tokens {
+            let keysym = keysym_from_name(token, KEYSYM_NO_FLAGS);
+            keysyms.push(keysym);
+        }
+        keysyms
+    }
+
+    fn parse_modkeys(data: &str) -> ModifiersState {
         let tokens = data.split(" ");
         let mut mod_keys = ModifiersState::default();
 
@@ -128,11 +160,40 @@ impl KeyBindings {
         }
         mod_keys
     }
+}
+
+
+
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct KeyBindings {
+    bindings: Vec<KeyBinding>
+}
+
+
+impl KeyBindings {
+    fn new() -> Self {
+        KeyBindings { bindings: Vec::new() }
+    }
+
+    fn from(values: &Vec<Value>) -> Self {
+        let mut key_bindings = KeyBindings::new();
+
+        for value in values {
+            let binding = KeyBinding::from(value.clone());
+            key_bindings.bindings.push(binding);
+        }
+        key_bindings
+    }
+
+    fn add_keybinding(&mut self, key_binding: KeyBinding) {
+        self.bindings.push(key_binding);
+    }
 
     pub fn process_keyboard_shortcut(&self, modifiers: ModifiersState, keysym: Keysym) -> KeyAction {
         for binding in &self.bindings {
-            if binding.mod_key == modifiers &&
-               binding.key.contains(&keysym) {
+            if binding.modifiers == modifiers &&
+               binding.keys.contains(&keysym) {
                    return KeyAction::Run(binding.command.clone());
                }
         }
