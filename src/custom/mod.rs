@@ -5,7 +5,7 @@ use xkbcommon::xkb::keysym_from_name;
 use xkbcommon::xkb::Keysym;
 use xkbcommon::xkb::KEYSYM_NO_FLAGS;
 
-use self::config::{Bar, MenuEntry, RawConfiguration, RawKeyBinding, RawKeyboardConfig};
+use self::config::{Bar, MenuEntry, RawConfiguration, RawKeyBinding};
 
 pub mod config;
 
@@ -30,6 +30,7 @@ pub struct KeyBindings {
 }
 
 
+#[derive(Debug, PartialEq)]
 /// Possible results of a keyboard action
 pub enum KeyAction {
     /// Quit the compositor
@@ -59,9 +60,17 @@ pub struct Configuration {
 impl<'a> Configuration {
     pub fn new(path: &str) -> Self {
         let raw_config = RawConfiguration::from_file(path);
+        
+        let mut keybindings = KeyBindings::new();
+
+        for binding in &raw_config.key_bindings {
+            keybindings.add_keybinding(binding);
+        }
+        
+        
         Configuration {
             raw_config: raw_config,
-            key_bindings: KeyBindings::new(),
+            key_bindings: keybindings,
             menu: Vec::new(),
             bar: Bar::new()
         }
@@ -84,18 +93,11 @@ impl KeyBindings {
         KeyBindings { bindings: Vec::new() }
     }
 
-    fn add_keybinding(&mut self, config_keybinding: RawKeyBinding) {
+    fn add_keybinding(&mut self, config_keybinding: &RawKeyBinding) {
         let binding = KeyBinding {
             description: config_keybinding.description.clone(),
             key: vec![ keysym_from_name(&config_keybinding.key, KEYSYM_NO_FLAGS) ],
-            mod_key: ModifiersState {
-                ctrl: true,
-                alt: false,
-                shift: false,
-                caps_lock: false,
-                logo: false,
-                num_lock: false,
-            },
+            mod_key: self.parse_modkeys(&config_keybinding.mod_key),
             command: config_keybinding.command.clone()
         };
         self.bindings.push(binding);
@@ -108,12 +110,30 @@ impl KeyBindings {
         for token in tokens {
             if token == "Crtl" {
                 mod_keys.ctrl = true;
+            } else if token == "Alt" {
+                mod_keys.alt = true;
+            } else if token == "Shift" {
+                mod_keys.shift = true;
+            } else if token == "CapsLock" {
+                mod_keys.caps_lock = true;
+            } else if token == "Logo" {
+                mod_keys.logo = true;
+            } else if token == "NumLock" {
+                mod_keys.num_lock = true;
+            } else {
+                println!("Unknown ModKey {}", token);
             }
         }
         mod_keys
     }
 
-    fn process_keyboard_shortcut(&self, modifiers: ModifiersState, keysym: Keysym) -> KeyAction {
+    pub fn process_keyboard_shortcut(&self, modifiers: ModifiersState, keysym: Keysym) -> KeyAction {
+        for binding in &self.bindings {
+            if binding.mod_key == modifiers &&
+               binding.key.contains(&keysym) {
+                   return KeyAction::Run(binding.command.clone());
+               }
+        }
         KeyAction::Forward
     }
 }

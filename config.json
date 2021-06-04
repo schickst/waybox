@@ -18,6 +18,12 @@
             "command": "dmenu_run"
         },
         {
+            "description": "Run kate",
+            "key": "F3",
+            "mod_key": "Logo",
+            "command": "kate"
+        },
+        {
             "description": "Close/Kill the focused window",
             "key": "Q",
             "mod_key": "Logo",

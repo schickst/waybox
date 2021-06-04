@@ -1,3 +1,4 @@
+use crate::custom::{CONFIGURATION, KeyAction};
 use std::{process::Command, sync::atomic::Ordering};
 
 use crate::AnvilState;
@@ -267,23 +268,15 @@ impl AnvilState {
     }
 }
 
-/// Possible results of a keyboard action
-enum KeyAction {
-    /// Quit the compositor
-    Quit,
-    /// Trigger a vt-switch
-    VtSwitch(i32),
-    /// run a command
-    Run(String),
-    /// Switch the current screen
-    Screen(usize),
-    /// Forward the key to the client
-    Forward,
-    /// Do nothing more
-    None,
-}
+
 
 fn process_keyboard_shortcut(modifiers: ModifiersState, keysym: Keysym) -> KeyAction {
+    let action = CONFIGURATION.key_bindings.process_keyboard_shortcut(modifiers, keysym);
+
+    if action != KeyAction::Forward {
+        return action;
+    }
+
     if modifiers.ctrl && modifiers.alt && keysym == xkb::KEY_BackSpace
         || modifiers.logo && keysym == xkb::KEY_q
     {
