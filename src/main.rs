@@ -25,7 +25,7 @@ mod winit;
 mod xwayland;
 mod custom;
 
-use custom::Configuration;
+use custom::config::Configuration;
 use state::AnvilState;
 
 

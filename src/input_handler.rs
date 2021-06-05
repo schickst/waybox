@@ -1,4 +1,4 @@
-use crate::custom::{KeyAction};
+use crate::custom::config::KeyAction;
 use std::{process::Command, sync::atomic::Ordering};
 
 use crate::AnvilState;

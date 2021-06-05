@@ -59,7 +59,7 @@ use smithay::{
     },
 };
 
-use crate::{custom::Configuration, drawing::*};
+use crate::{custom::config::Configuration, drawing::*};
 use crate::shell::{MyWindowMap, Roles};
 use crate::state::AnvilState;
 

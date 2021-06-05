@@ -14,7 +14,7 @@ use smithay::{
 
 use slog::Logger;
 
-use crate::{custom::Configuration, drawing::*};
+use crate::{custom::config::Configuration, drawing::*};
 use crate::state::AnvilState;
 
 pub fn run_winit(

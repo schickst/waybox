@@ -1,4 +1,4 @@
-use crate::custom::Configuration;
+use crate::custom::config::Configuration;
 use std::{
     cell::RefCell,
     rc::Rc,
