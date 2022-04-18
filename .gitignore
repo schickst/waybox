@@ -1,6 +1,6 @@
 /target
 Cargo.lock
-
+/.idea/**
 
 # Added by cargo
 #
